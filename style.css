@@ -1,0 +1,138 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+/* ========================================================================== */
+/* CUTE & PASTEL FLORAL TYCOON THEME                                          */
+/* ========================================================================== */
+
+body, button, select, input, .glass-panel, h1, h2, h3, p, span {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+:root {
+    /* Soft Pastel Color Palette */
+    --bg-main: #fcf8f5;          /* Warm soft cream background */
+    --panel-bg: rgba(255, 253, 250, 0.85); /* Frosted glass cream */
+    --primary: #ffb7b2;          /* Soft pastel coral pink */
+    --secondary: #b5ead7;        /* Soft mint green */
+    --accent: #ffdac1;           /* Peach pastel */
+    --yellow-sun: #e2f0cb;       /* Soft pastel yellow-green */
+    --lavender: #c7ceea;         /* Soft pastel lavender */
+   
+    --text-main: #5c5552;        /* Soft warm dark brown for text */
+    --text-muted: #8c827e;       /* Muted gray-brown */
+   
+    --border-soft: rgba(255, 183, 178, 0.45); /* Gentle pink border */
+    --shadow-cute: 0 10px 25px -5px rgba(255, 183, 178, 0.25),
+                   0 8px 10px -6px rgba(181, 234, 215, 0.2);
+    --radius-blob: 24px;         /* Rounded friendly shape */
+}
+
+body {
+    background-color: var(--bg-main);
+    background-image: radial-gradient(#d8f3dc 1.5px, transparent 1.5px);
+    background-size: 24px 24px;
+    color: var(--text-main);
+    font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+.code-font {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* Glassmorphism Panel */
+.glass-panel {
+    background: var(--panel-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 2px solid var(--border-soft);
+    box-shadow: var(--shadow-cute);
+    border-radius: var(--radius-blob);
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Cute Interactive Pastel Buttons */
+.btn-pastel {
+    background: linear-gradient(135deg, #ffb7b2, #ffdac1);
+    color: #5c5552;
+    font-weight: 700;
+    border-radius: 9999px;
+    border: none;
+    box-shadow: 0 4px 12px rgba(255, 183, 178, 0.4);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.btn-pastel:hover {
+    transform: translateY(-2px) scale(1.03);
+    box-shadow: 0 6px 18px rgba(255, 183, 178, 0.6);
+    filter: brightness(1.02);
+}
+
+.btn-pastel:active {
+    transform: scale(0.97);
+}
+
+.btn-mint {
+    background: linear-gradient(135deg, #b5ead7, #e2f0cb);
+    color: #3b5249;
+    box-shadow: 0 4px 12px rgba(181, 234, 215, 0.4);
+}
+
+/* Garden Soil Tiles */
+.garden-tile {
+    background-color: #f7eedf;
+    border: 2px dashed #e2d2c1;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.garden-tile:hover {
+    background-color: #fffaf0;
+    border-color: var(--primary);
+    transform: scale(1.05);
+    box-shadow: 0 8px 20px rgba(255, 183, 178, 0.35);
+}
+
+/* ========================================================================== */
+/* SOFT PASTEL CODE EDITOR & CONSOLE THEME                                    */
+/* ========================================================================== */
+#code-editor {
+    background-color: #faf5f0 !important; /* Soft warm cream background */
+    color: #5c4d46 !important;            /* Cozy warm brown text */
+    border: 2px solid #ffcad4 !important;    /* Soft pastel pink border */
+    box-shadow: inset 0 2px 8px rgba(255, 183, 178, 0.15) !important;
+}
+
+#code-editor:focus {
+    outline: none !important;
+    border-color: #ffb7b2 !important;
+    box-shadow: inset 0 2px 8px rgba(255, 183, 178, 0.25), 0 0 0 3px rgba(255, 183, 178, 0.3) !important;
+}
+
+#output-console {
+    background-color: #f4ece6 !important;    /* Soft pastel cream console */
+    color: #6e5e55 !important;            /* Muted cozy text color */
+    border: 2px solid #f0d5cc !important;
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.03) !important;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #f1e9e0;
+    border-radius: 10px;
+}
+::-webkit-scrollbar-thumb {
+    background: #ffb7b2;
+    border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #ff9aa2;
+}
