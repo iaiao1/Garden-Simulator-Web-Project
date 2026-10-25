@@ -33,6 +33,9 @@
             <div class="glass-panel plaque"><span class="text-xl">⭐</span><div><div class="lbl">Level &amp; XP</div><div class="val" id="level-xp-text">Lvl 1 (0/100 XP)</div></div></div>
             <div class="glass-panel plaque"><span class="text-xl" id="weather-icon-badge">☀️</span><div><div class="lbl" id="day-label">Day 1 (Sunny)</div><div class="val" id="clock-text">06:00 AM</div></div></div>
             <div class="glass-panel plaque" style="padding:8px 12px">
+                <button onclick="openModal('endday')" class="btn-pastel btn-sky px-4 py-2 text-xs" title="End the day now and start tomorrow">🌙 End Day</button>
+            </div>
+            <div class="glass-panel plaque" style="padding:8px 12px">
                 <button id="music-btn" onclick="toggleMusic()" class="btn-pastel btn-mint w-9 h-9 flex items-center justify-center text-lg" title="Toggle music">🎵</button>
                 <input id="music-volume" type="range" min="0" max="100" value="45" class="w-20 accent-rose-400" aria-label="Music volume">
             </div>
