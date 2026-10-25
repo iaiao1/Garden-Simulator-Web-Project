@@ -1,4 +1,4 @@
-const APP_VERSION = "3.0.0";
+const APP_VERSION = "0.23.0";
  
 let pyodideInstance = null;
 let gardenGridState = {};
@@ -27,7 +27,7 @@ let dailyStats = { coinsEarned: 0, salesCount: 0, harvestCount: 0 };
 // ---------------------------------------------------------------
 const FLOWER_CATALOG = {
     "Rose":           { emoji: "🌹", rarity: "COMMON",    price: 25,  xp: 15 },
-    "Hyacinth":       { emoji: "🪻", rarity: "COMMON",    price: 30,  xp: 18 },
+    "Sakura":         { emoji: "🌸", rarity: "COMMON",    price: 30,  xp: 18 },
     "Lotus":          { emoji: "🪷", rarity: "UNCOMMON",  price: 50,  xp: 30 },
     "Hibiscus":       { emoji: "🌺", rarity: "UNCOMMON",  price: 65,  xp: 40 },
     "Cherry Blossom": { emoji: "🌸", rarity: "RARE",      price: 90,  xp: 60 },
@@ -37,6 +37,24 @@ const FLOWER_CATALOG = {
     "Pink Cosmos":    { emoji: "🌷", rarity: "MYTHICAL",  price: 240, xp: 180 },
     "Mexican Aster":  { emoji: "💮", rarity: "MYTHICAL",  price: 300, xp: 230 }
 };
+ 
+// Flower pictures: put the PNGs in the same folder as index.html.
+// If you keep them in a sub-folder, change IMG_DIR (for example "images/").
+const IMG_DIR = "";
+const FLOWER_IMG = {
+    "Rose": "rose.png", "Sakura": "sakura.png", "Lotus": "lotus.png", "Hibiscus": "hibiscus.png", "Cherry Blossom": "cherry-blossom.png",
+    "Sunflower": "sunflower.png", "Daisy": "daisy.png", "Morning Glory": "morning-glory.png", "Pink Cosmos": "pink-cosmos.png", "Mexican Aster": "mexican-aster.png"
+};
+const imgSrc = name => IMG_DIR + FLOWER_IMG[name];
+function flowerImg(name, size, cls = "") {
+    return `<img class="fimg ${cls}" src="${imgSrc(name)}" alt="${name}" draggable="false" style="width:${size}px;height:${size}px" data-fb="${FLOWER_CATALOG[name].emoji}" onerror="imgFail(this)">`;
+}
+// If a picture is missing, show a small fallback so the game still works
+function imgFail(el) {
+    const sp = document.createElement("span");
+    sp.className = "fimg-fb"; sp.textContent = el.dataset.fb; sp.style.fontSize = parseInt(el.style.width) * 0.75 + "px";
+    el.replaceWith(sp);
+}
  
 const TIERS = {
     COMMON:    { cost: 0,    icon: "🌱", sec: 3 },
@@ -51,10 +69,11 @@ const seedCost = name => Math.max(5, Math.round(FLOWER_CATALOG[name].price * 0.4
 const isUnlocked = name => !!unlockedTiers[FLOWER_CATALOG[name].rarity];
  
 // Only the starter (common) seeds, a small starter bag
-let seedStock = { "Rose": 3, "Hyacinth": 3 };
+let seedStock = { "Rose": 3, "Sakura": 3 };
 let flowerInventory = {};
 let toolsInventory = { "Water Charges": 30, "Growth Fertilizer": 2, "Sprinkler Level": 1, "Plots": 25 };
 const MAX_WATER = 100;
+const DAILY_WATER = 30; // the watering can is topped up to 30 at every dawn
  
 // ---------------------------------------------------------------
 // Customer orders (reward coins = total flower price)
@@ -65,9 +84,9 @@ const orderType = o => (Object.keys(o.items).length > 1 ? "bouquet" : "single");
  
 let activeCustomerOrders = [
     { id: 1, items: { "Rose": 2 } },
-    { id: 2, items: { "Rose": 2, "Hyacinth": 1 } },
-    { id: 3, items: { "Hyacinth": 1 } },
-    { id: 4, items: { "Hyacinth": 2, "Rose": 1 } }
+    { id: 2, items: { "Rose": 2, "Sakura": 1 } },
+    { id: 3, items: { "Sakura": 1 } },
+    { id: 4, items: { "Sakura": 2, "Rose": 1 } }
 ];
  
 function generateNewOrder() {
@@ -102,7 +121,7 @@ updateResources(200, 90, 110, 80)
  
 addPlantsToDropdown([
     ("Rose", "🌹", 25),
-    ("Hyacinth", "🪻", 30),
+    ("Sakura", "🪻", 30),
     ("Lotus", "🪷", 50),
     ("Hibiscus", "🌺", 65),
     ("Cherry Blossom", "🌸", 90),
@@ -222,7 +241,72 @@ class PlantGrowthTree:
  
  
 tree = PlantGrowthTree()
+ 
+ 
+# ---- Game integration: the Flower Almanac tree ----
+# Garden Almanac (root) -> Tiers -> Flowers. The game's Flower Almanac calls
+# catalog_traverse() below, so you can watch YOUR traversal code run!
+from collections import deque
+ 
+ 
+class CatalogNode:
+    def __init__(self, name, icon):
+        self.name = name
+        self.icon = icon
+        self.children = []
+ 
+    def add_child(self, child):
+        self.children.append(child)
+        return child
+ 
+ 
+def build_catalog_tree():
+    data = json.loads(getCatalogJSON())
+    root = CatalogNode("Garden Almanac", "📖")
+    for tier in data:
+        tier_node = root.add_child(CatalogNode(tier["tier"], tier["icon"]))
+        for flower in tier["flowers"]:
+            tier_node.add_child(CatalogNode(flower["name"], flower["emoji"]))
+    return root
+ 
+ 
+def preorder(node, out):
+    out.append(node.name)           # visit the node first...
+    for child in node.children:     # ...then each child, left to right
+        preorder(child, out)
+    return out
+ 
+ 
+def postorder(node, out):
+    for child in node.children:     # children first...
+        postorder(child, out)
+    out.append(node.name)           # ...then the node itself
+    return out
+ 
+ 
+def level_order(root):
+    out, queue = [], deque([root])  # BFS uses a queue
+    while queue:
+        node = queue.popleft()
+        out.append(node.name)
+        queue.extend(node.children)
+    return out
+ 
+ 
+catalog_root = build_catalog_tree()
+ 
+ 
+def catalog_traverse(mode):
+    if mode == "pre":
+        return preorder(catalog_root, [])
+    if mode == "post":
+        return postorder(catalog_root, [])
+    return level_order(catalog_root)
+ 
+ 
+pushAction("Built the Flower Almanac tree")
 print("Topic 4 Hierarchical Growth Tree structured successfully!")
+print("Almanac tree ready: open the Flower Almanac and press a traversal button!")
 `
     },
     5: {
@@ -309,17 +393,19 @@ function initializeWeatherCalendar() {
         const w = d === 1 ? weatherTypes[0] : weatherTypes[Math.floor(Math.random() * weatherTypes.length)];
         thirtyDayWeatherSchedule.push({ day: d, ...w });
     }
+    pickEvents(thirtyDayWeatherSchedule);
     currentWeather = thirtyDayWeatherSchedule[0];
+    currentEvent = currentWeather.event || null;
     updateClimateQueueUI();
 }
  
 function updateClimateQueueUI() {
     document.getElementById("weather-icon-badge").innerText = currentWeather.icon;
     document.getElementById("day-label").innerText = `Day ${currentDay} (${currentWeather.name})`;
-    const info = WEATHER_INFO[currentWeather.effect];
-    document.getElementById("banner-icon").innerText = currentWeather.icon;
-    document.getElementById("banner-text").innerText = info.text;
-    document.getElementById("weather-banner").style.setProperty("--banner-tint", info.bg);
+    const info = WEATHER_INFO[currentWeather.effect], e = currentWeather.event && EVENTS[currentWeather.event];
+    document.getElementById("banner-icon").innerText = e ? e.icon : currentWeather.icon;
+    document.getElementById("banner-text").innerText = info.text + (e ? `  ${e.icon} ${e.name}: ${e.text}` : "");
+    document.getElementById("weather-banner").style.setProperty("--banner-tint", e ? e.tint : info.bg);
     renderCalendarWidget();
     refreshModal();
 }
@@ -339,6 +425,7 @@ async function initPyodide() {
         pyodideInstance.globals.set("updateResources", updateResources);
         pyodideInstance.globals.set("addPlantsToDropdown", addPlantsToDropdown);
         pyodideInstance.globals.set("pushAction", pushAction);
+        pyodideInstance.globals.set("getCatalogJSON", getCatalogJSON);
         pyodideInstance.globals.set("updateClimateQueue", updateClimateQueue);
         await pyodideInstance.runPythonAsync(`
 import sys
@@ -394,28 +481,30 @@ function updateResourceBars() {
     set("energy", `${fert} left`, fert * 10);
 }
  
+let currentSeed = "Rose";
 function refreshSeedSelector() {
-    const select = document.getElementById("crop-selector");
-    if (!select) return;
-    const prev = select.value;
-    select.innerHTML = "";
-    Object.keys(FLOWER_CATALOG).filter(isUnlocked).forEach(name => {
-        const opt = document.createElement("option");
-        opt.value = name;
-        opt.textContent = `${FLOWER_CATALOG[name].emoji} ${name} (x${seedStock[name] || 0})`;
-        select.appendChild(opt);
-    });
-    if (prev && [...select.options].some(o => o.value === prev)) select.value = prev;
+    const box = document.getElementById("seed-picker");
+    if (!box) return;
+    const names = Object.keys(FLOWER_CATALOG).filter(isUnlocked);
+    if (!names.includes(currentSeed)) currentSeed = names[0];
+    box.innerHTML = names.map(n => `<button class="seed-card ${n === currentSeed ? "active" : ""} ${(seedStock[n] || 0) <= 0 ? "empty" : ""}" onclick="pickSeed('${n}')" title="${n}">
+        ${flowerImg(n, 46)}<span class="sn">${n}</span><span class="sc">x${seedStock[n] || 0}</span></button>`).join("");
 }
- 
-const selectedSeed = () => document.getElementById("crop-selector")?.value || "Rose";
+function pickSeed(n) { currentSeed = n; refreshSeedSelector(); renderGarden(); }
+const selectedSeed = () => currentSeed;
  
 // ---------------------------------------------------------------
 // Greenhouse
 // ---------------------------------------------------------------
 const MATURE = 4;
-const STAGE_ICONS = ["🌰", "🌱", "🌿", "🪴"];
-const STAGE_SIZE = [18, 24, 28, 30];
+const SOIL = "<ellipse cx='24' cy='44' rx='15' ry='5' fill='#b98562' opacity='.55'/>";
+const LEAFP = (x, y, rx, rot, c) => `<ellipse cx='${x}' cy='${y}' rx='${rx}' ry='4' fill='${c}' transform='rotate(${rot} ${x} ${y})'/>`;
+const STAGE_SVG = [
+    `<svg viewBox='0 0 48 52'>${SOIL}<ellipse cx='24' cy='38' rx='7' ry='9' fill='#8a5a3a' transform='rotate(-15 24 38)'/><path d='M21 32 q3 -4 6 0' stroke='#c9a07a' fill='none' stroke-width='1.6' stroke-linecap='round'/></svg>`,
+    `<svg viewBox='0 0 48 52'>${SOIL}<path d='M24 44 V30' stroke='#6fbf86' stroke-width='3' stroke-linecap='round'/>${LEAFP(17, 29, 8, -30, "#8fd3a0")}${LEAFP(31, 27, 8, 30, "#7fc995")}</svg>`,
+    `<svg viewBox='0 0 48 52'>${SOIL}<path d='M24 44 V16' stroke='#6fbf86' stroke-width='3.2' stroke-linecap='round'/>${LEAFP(15, 35, 9, -30, "#8fd3a0")}${LEAFP(33, 31, 9, 30, "#7fc995")}${LEAFP(16, 23, 8, -35, "#9ddcae")}${LEAFP(32, 19, 8, 35, "#8fd3a0")}</svg>`,
+    `<svg viewBox='0 0 48 52'>${SOIL}<path d='M24 44 V14' stroke='#5fb57a' stroke-width='3.4' stroke-linecap='round'/>${LEAFP(14, 36, 10, -30, "#8fd3a0")}${LEAFP(34, 32, 10, 30, "#7fc995")}${LEAFP(15, 25, 8, -35, "#9ddcae")}${LEAFP(33, 21, 8, 35, "#8fd3a0")}<circle cx='24' cy='11' r='7' fill='#ffc2d6'/><path d='M18 14 q6 6 12 0' fill='#8fd3a0'/><circle cx='22' cy='9' r='2' fill='#fff' opacity='.6'/></svg>`
+];
  
 function growSeconds(plant) {
     let s = TIERS[FLOWER_CATALOG[plant.name].rarity].sec / (1 + 0.25 * (toolsInventory["Sprinkler Level"] - 1));
@@ -427,17 +516,13 @@ function growSeconds(plant) {
 const waterCost = () => (currentWeather.effect === "dry_fast" ? 2 : 1);
  
 function bloomHTML(name, big, extraClass = "") {
-    const e = FLOWER_CATALOG[name].emoji;
-    return `<div class="plant-wrap ${extraClass}">
-        <span class="bloom-emoji" style="font-size:${big}px">${e}</span>
-        <div style="width:3px;height:12px;background:#6cc28a;border-radius:3px;margin-top:-1px"></div>
-        <span style="font-size:13px;margin-top:-7px">🍃</span></div>`;
+    return `<div class="plant-wrap ${extraClass}">${flowerImg(name, big + 14, "bloom-img")}</div>`;
 }
  
 function addPlantToGrid(pos, name) {
     if (!FLOWER_CATALOG[name]) name = "Rose";
     const isAutoWater = currentWeather.effect === "auto_water";
-    gardenGridState[pos] = { name, stageIndex: 0, watered: isAutoWater, growing: false, growthProgress: 0, damaged: false, timer: null };
+    gardenGridState[pos] = { name, stageIndex: 0, watered: isAutoWater, growing: false, growthProgress: 0, damaged: false, timer: null, mutation: null };
     renderTile(pos);
     if (isAutoWater) startPlantGrowthTimer(pos);
 }
@@ -483,22 +568,24 @@ function buildTile(i) {
         if (ready) cls += " ready watered";
         else if (plant.growing) cls += " growing watered";
         else if (plant.watered) cls += " watered";
+        if (plant.mutation) cls += ` mutated mut-${plant.mutation}`;
         cell.className = cls;
-        cell.title = `${plant.name} (stage ${Math.min(plant.stageIndex + 1, 5)}/5)`;
-        const art = ready
-            ? bloomHTML(plant.name, 36, "ready-plant")
-            : `<span class="plant-wrap" style="font-size:${STAGE_SIZE[plant.stageIndex]}px">${STAGE_ICONS[plant.stageIndex]}</span>`;
+        const m = plant.mutation && MUTATIONS[plant.mutation];
+        cell.title = `${m ? m.name + " " : ""}${plant.name} (stage ${Math.min(plant.stageIndex + 1, 5)}/5)`;
+        const art = ready ? bloomHTML(plant.name, 36, "ready-plant") : `<div class="plant-wrap stage">${STAGE_SVG[plant.stageIndex]}</div>`;
         let badge;
         if (ready) badge = `<span class="tile-badge bg-emerald-100 text-emerald-700">Ready ✨</span>`;
         else if (plant.growing) badge = `<span class="tile-badge bg-amber-100 text-amber-700">⏳ ${plant.growthProgress}s</span>`;
         else if (!plant.watered) badge = `<span class="tile-badge bg-sky-100 text-sky-700">Dry 💧</span>`;
         else badge = `<span class="tile-badge bg-emerald-100 text-emerald-700">Watered</span>`;
-        cell.innerHTML = art + badge;
+        const tag = m ? `<span class="mut-tag">${m.icon} ${m.name} x${m.mult}</span>` : "";
+        const perch = m && (plant.mutation === "pollinated" || plant.mutation === "winged") ? `<img class="perch" src="assets/butterfly-${(Number(i) % 8) + 1}.png" alt="" onerror="this.remove()">` : "";
+        cell.innerHTML = art + badge + tag + perch;
     } else {
         // Empty tile: hover shows the matured look of the selected seed
         const seed = selectedSeed();
         cell.className = cls;
-        cell.innerHTML = `<span class="text-rose-300/70 text-lg select-none">🌱</span>
+        cell.innerHTML = `<span class="faint">${STAGE_SVG[1]}</span>
             <div class="ghost">
                 <span class="sparkle s1">✨</span><span class="sparkle s2">✨</span><span class="sparkle s3">✨</span>
                 ${bloomHTML(seed, 38, "ghost-bloom")}
@@ -552,7 +639,7 @@ async function handleTileClick(i, el) {
         seedStock[cropName]--;
         if (seedStock[cropName] === 0) delete seedStock[cropName];
         const cols = gridCols(), row = Math.floor(i / cols), col = i % cols;
-        floatPop(`-1 ${FLOWER_CATALOG[cropName].emoji} seed`, "loss", el);
+        floatPop(`-1 ${flowerImg(cropName, 20)} seed`, "loss", el);
         let viaPython = false;
         if (pyodideInstance) {
             try { await pyodideInstance.runPythonAsync(`plant_crop(${row}, ${col}, '${cropName.replace(/'/g, "\\'")}')`); viaPython = !!gardenGridState[i]; } catch (e) {}
@@ -565,10 +652,12 @@ async function handleTileClick(i, el) {
  
     // ---- Harvest ----
     if (plant.stageIndex >= MATURE) {
-        flowerInventory[plant.name] = (flowerInventory[plant.name] || 0) + 1;
+        if (plant.mutation) { const mk = `${plant.name}|${plant.mutation}`; mutInventory[mk] = (mutInventory[mk] || 0) + 1; }
+        else flowerInventory[plant.name] = (flowerInventory[plant.name] || 0) + 1;
+        discoverFlower(plant.name);
         dailyStats.harvestCount++;
-        floatPop(`+1 ${FLOWER_CATALOG[plant.name].emoji} ${plant.name}`, "gain", el);
-        showToast(`Harvested 1x ${plant.name} (${FLOWER_CATALOG[plant.name].rarity}) into your inventory! 🧺`);
+        floatPop(`+1 ${flowerImg(plant.name, 20)} ${plant.mutation ? MUTATIONS[plant.mutation].name + " " : ""}${plant.name}`, "gain", el);
+        showToast(`Harvested 1x ${plant.mutation ? MUTATIONS[plant.mutation].name + " " : ""}${plant.name} (${FLOWER_CATALOG[plant.name].rarity}) into your inventory! 🧺`);
         pushAction(`Harvested ${plant.name}`);
         delete gardenGridState[i];
         renderTile(i); updatePlayerStats();
@@ -598,46 +687,94 @@ function setTool(tool) {
 }
  
 // ---------------------------------------------------------------
-// Inventory
+// Inventory (big satchel) & Customer orders (big tickets)
 // ---------------------------------------------------------------
+const CUSTOMERS = [["Mia", "👧"], ["Lola Rosa", "👵"], ["Kuya Ben", "🧑‍🌾"], ["Ate Luz", "👩‍🎤"], ["Tito Jun", "👨‍🍳"], ["Nene", "🧒"], ["Mang Tonyo", "👴"], ["Ms. Cruz", "👩‍🏫"]];
+const orderWho = o => CUSTOMERS[Math.floor(Math.abs(Number(o.id)) * 7919) % CUSTOMERS.length];
+ 
+// Mutated flowers are stored apart as "Rose|prismatic". They count for orders and pay extra.
+const mutKeys = f => Object.keys(mutInventory).filter(k => k.startsWith(f + "|") && mutInventory[k] > 0);
+const ownedTotal = f => (flowerInventory[f] || 0) + mutKeys(f).reduce((s, k) => s + mutInventory[k], 0);
+ 
+// Which flowers an order would use: best mutations first, then plain ones
+function consumePlan(o) {
+    const picks = []; let coins = 0, ok = true;
+    for (const [f, q] of Object.entries(o.items)) {
+        let need = q;
+        const stacks = mutKeys(f).sort((a, b) => MUTATIONS[b.split("|")[1]].mult - MUTATIONS[a.split("|")[1]].mult);
+        for (const k of stacks) {
+            if (!need) break;
+            const mk = k.split("|")[1], n = Math.min(need, mutInventory[k]);
+            picks.push({ k, f, mut: mk, n }); coins += n * mutPrice(f, mk); need -= n;
+        }
+        if (need) { const n = Math.min(need, flowerInventory[f] || 0); if (n) { picks.push({ k: null, f, mut: null, n }); coins += n * mutPrice(f, null); } need -= n; }
+        if (need) ok = false;
+    }
+    return { ok, coins, picks };
+}
+ 
 function renderInventoryView() {
     const c = document.getElementById("inventory-container");
     if (!c) return;
-    const card = (title, color, body) => `<div class="bg-white/90 p-4 rounded-2xl border border-rose-200 shadow-sm"><h3 class="font-bold text-rose-900 text-sm mb-2">${title}</h3><ul class="space-y-1.5 text-xs text-rose-700 overflow-auto max-h-56">${body}</ul></div>`;
-    const li = (bg, l, r) => `<li class="flex justify-between items-center ${bg} px-2.5 py-1.5 rounded-xl"><span>${l}</span><span class="font-bold">${r}</span></li>`;
-    const empty = t => `<li class="text-[11px] text-rose-400 font-semibold p-2">${t}</li>`;
+    const flowers = Object.entries(flowerInventory).filter(([, n]) => n > 0);
+    const muts = Object.entries(mutInventory).filter(([, n]) => n > 0);
+    const seeds = Object.entries(seedStock).filter(([, n]) => n > 0);
+    const totalF = flowers.reduce((s, [, n]) => s + n, 0) + muts.reduce((s, [, n]) => s + n, 0);
+    const totalV = flowers.reduce((s, [f, n]) => s + n * FLOWER_CATALOG[f].price, 0) + muts.reduce((s, [k, n]) => { const [f, mk] = k.split("|"); return s + n * mutPrice(f, mk); }, 0);
+    const totalS = seeds.reduce((s, [, n]) => s + n, 0);
+    const stat = (ic, val, label, a, b, bd) => `<div class="inv-stat" style="--s1:${a};--s2:${b};--s3:${bd}"><span class="ic">${ic}</span><div><b>${val}</b><span class="l">${label}</span></div></div>`;
  
-    const flowers = Object.entries(flowerInventory).filter(([, n]) => n > 0)
-        .map(([f, n]) => li("bg-rose-50/70", `${FLOWER_CATALOG[f].emoji} <b>${f}</b> <span class="text-[8px] bg-rose-100 text-rose-600 px-1 py-0.5 rounded font-bold">${FLOWER_CATALOG[f].rarity}</span>`, `${n} pcs`)).join("");
-    const seeds = Object.entries(seedStock).filter(([, n]) => n > 0)
-        .map(([s, n]) => li("bg-emerald-50/70", `🌰 <b>${s}</b>`, `${n} seeds`)).join("");
-    const tools = [
-        ["💧 Water Charges", `${toolsInventory["Water Charges"]} / ${MAX_WATER}`],
-        ["🧪 Growth Fertilizer", toolsInventory["Growth Fertilizer"]],
-        ["⚡ Sprinkler Level", toolsInventory["Sprinkler Level"]],
-        ["🌿 Plots", toolsInventory["Plots"]]
-    ].map(([n, v]) => li("bg-amber-50/70", `<b>${n}</b>`, v)).join("");
+    const mutCards = muts.map(([k, n]) => {
+        const [f, mk] = k.split("|"), d = FLOWER_CATALOG[f], m = MUTATIONS[mk], each = mutPrice(f, mk);
+        return `<div class="inv-card tc-${d.rarity} mut mut-${mk}"><span class="mrib">${m.icon} ${m.name}</span><span class="qty">x${n}</span><div style="height:14px"></div>${flowerImg(f, 104)}<h4>${f}</h4>
+            <span class="bonus">x${m.mult} · +${each - d.price}c each</span><div><span class="val">🪙 ${each * n} (${each} each)</span></div></div>`;
+    }).join("");
+    const plainCards = flowers.map(([f, n]) => {
+        const d = FLOWER_CATALOG[f];
+        return `<div class="inv-card tc-${d.rarity}"><span class="qty">x${n}</span>${flowerImg(f, 104)}<h4>${f}</h4>
+            <span class="rar rar-${d.rarity}">${d.rarity}</span><div><span class="val">🪙 ${d.price * n} (${d.price} each)</span></div></div>`;
+    }).join("");
+    const basket = mutCards + plainCards || `<div class="inv-empty">${flowerImg("Rose", 110)}<br>Your basket is empty.<br>Plant, water and harvest flowers to fill it!</div>`;
  
-    c.innerHTML = card("🧺 Harvested flowers", "", flowers || empty("Nothing harvested yet. Plant, water and harvest to fill this basket!"))
-        + card("🌱 Seed bag", "", seeds || empty("No seeds left. Visit the Seed Shop."))
-        + card("🧰 Tools", "", tools);
+    const packets = seeds.map(([f, n]) => {
+        const d = FLOWER_CATALOG[f];
+        return `<div class="inv-card tc-${d.rarity}" style="padding-top:12px"><span class="qty">x${n}</span>${flowerImg(f, 64)}<h4 style="font-size:17px">${f} seeds</h4></div>`;
+    }).join("") || `<div class="inv-empty" style="padding:14px">No seeds left. Visit the Seed Shop on the right.</div>`;
+ 
+    const water = toolsInventory["Water Charges"], fert = toolsInventory["Growth Fertilizer"], lvl = toolsInventory["Sprinkler Level"], plots = toolsInventory["Plots"];
+    const tool = (ic, name, line, inner, c1, c2) => `<div class="tool-card" style="--c1:${c1};--c2:${c2}"><span class="ic">${ic}</span><div class="flex-1"><b class="title-font text-xl">${name}</b><div class="text-xs font-bold" style="color:var(--ink-soft)">${line}</div>${inner}</div></div>`;
+    const meter = (pct, m1, m2) => `<div class="meter" style="--m1:${m1};--m2:${m2}"><i style="width:${Math.min(100, pct)}%"></i></div>`;
+    const tools = tool("💧", "Water charges", `${water} / ${MAX_WATER} left · refills to ${DAILY_WATER} every dawn`, meter(water, "#b5d3f8", "#8fe0e8"), "#a9cdf2", "#e6f1fc")
+        + tool("🧪", "Growth fertilizer", `${fert} bottles`, meter(fert * 10, "#fbe0a0", "#f8c47e"), "#f4d27c", "#fff5d6")
+        + tool("⚡", "Sprinkler level", `Level ${lvl} of 5`, `<div class="pips">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= lvl ? "on" : ""}"></i>`).join("")}</div>`, "#e0acf0", "#f7e8fc")
+        + tool("🌿", "Flower beds", `${plots} / 100 plots`, meter(plots, "#c0e8ac", "#8cd6aa"), "#a6dcb8", "#e5f7ea");
+ 
+    c.innerHTML = `<div class="inv-stats">
+            ${stat("🧺", totalF, "Flowers in basket", "#fff", "#ffe6ef", "#f4c6d6")}${stat("🪙", totalV, "Basket value (coins)", "#fff", "#fff3cc", "#f3d98a")}
+            ${stat("🌱", totalS, "Seeds in bag", "#fff", "#e5f7ea", "#a6dcb8")}${stat("📖", `${discoveredCount()}/${Object.keys(FLOWER_CATALOG).length}`, "Almanac discovered", "#fff", "#f1e8fc", "#d3c1f0")}</div>
+        <div class="inv-sec grow"><h3>Harvest Basket <small>${totalF} flowers ready to sell${muts.length ? " · mutated ones pay extra!" : ""}</small></h3><div class="inv-grid">${basket}</div></div>
+        <div class="inv-sec"><h3>Seed Bag <small>${totalS} seeds</small></h3><div class="inv-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">${packets}</div></div>
+        <div class="inv-sec"><h3>Tool Shelf</h3><div class="inv-grid" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr))">${tools}</div></div>`;
 }
  
 // ---------------------------------------------------------------
 // Orders
 // ---------------------------------------------------------------
-function canFulfill(o) { return Object.entries(o.items).every(([f, q]) => (flowerInventory[f] || 0) >= q); }
+function canFulfill(o) { return consumePlan(o).ok; }
  
 function deliverOrder(orderId) {
     const idx = activeCustomerOrders.findIndex(o => o.id === orderId);
     if (idx === -1) return;
-    const order = activeCustomerOrders[idx];
-    if (!canFulfill(order)) { showToast("Not enough flowers in your inventory for this order!"); return; }
-    for (const f in order.items) { flowerInventory[f] -= order.items[f]; if (!flowerInventory[f]) delete flowerInventory[f]; }
-    const coins = orderCoins(order), xp = orderXP(order);
+    const order = activeCustomerOrders[idx], plan = consumePlan(order);
+    if (!plan.ok) { showToast("Not enough flowers in your inventory for this order!"); return; }
+    plan.picks.forEach(p => {
+        if (p.k) { mutInventory[p.k] -= p.n; if (!mutInventory[p.k]) delete mutInventory[p.k]; }
+        else { flowerInventory[p.f] -= p.n; if (!flowerInventory[p.f]) delete flowerInventory[p.f]; }
+    });
+    const coins = plan.coins, xp = orderXP(order), bonus = coins - orderCoins(order);
     playerCoins += coins; playerXP += xp;
     dailyStats.coinsEarned += coins; dailyStats.salesCount++;
-    showToast(`Order fulfilled! +${coins} Coins & +${xp} XP 🪙`);
+    showToast(`Order fulfilled! +${coins} Coins${bonus > 0 ? ` (incl. +${bonus} mutation bonus ✨)` : ""} & +${xp} XP 🪙`);
     pushAction(`Delivered order (+${coins}c)`);
     activeCustomerOrders.splice(idx, 1, generateNewOrder());
     document.getElementById("coins-text").classList.add("bump");
@@ -648,19 +785,32 @@ function deliverOrder(orderId) {
 function renderCustomerOrders() {
     const c = document.getElementById("orders-list-container");
     if (!c) return;
-    c.innerHTML = activeCustomerOrders.map(o => {
-        const ok = canFulfill(o);
-        const req = Object.entries(o.items).map(([f, q]) => {
-            const have = flowerInventory[f] || 0;
-            return `<span class="${have >= q ? "text-emerald-600" : "text-rose-500"} font-bold">${FLOWER_CATALOG[f].emoji} ${f} ${have}/${q}</span>`;
-        }).join(" · ");
-        return `<div class="bg-white/90 p-4 rounded-2xl border border-rose-200 flex flex-col justify-between gap-3 shadow-sm">
-            <div class="flex items-start gap-3"><span class="text-2xl">${orderType(o) === "bouquet" ? "💐" : "🌷"}</span>
-            <div><h4 class="font-bold text-rose-900 text-sm">${orderType(o) === "bouquet" ? "Custom bouquet" : "Single flower request"}</h4>
-            <p class="text-[11px] mt-0.5">${req}</p>
-            <p class="text-[11px] text-amber-700 font-bold mt-1">Reward: +${orderCoins(o)} coins · +${orderXP(o)} XP</p></div></div>
-            <button onclick="deliverOrder(${o.id})" class="w-full btn-pastel btn-mint py-2 text-xs ${ok ? "" : "btn-disabled"}">Deliver order</button></div>`;
+    const plans = activeCustomerOrders.map(o => ({ o, plan: consumePlan(o) }));
+    const ready = plans.filter(x => x.plan.ok).length;
+    const potential = plans.reduce((s, x) => s + (x.plan.ok ? x.plan.coins : orderCoins(x.o)), 0);
+    const cards = plans.map(({ o, plan }) => {
+        const ok = plan.ok, [who, face] = orderWho(o), base = orderCoins(o);
+        const items = Object.entries(o.items).map(([f, q]) => {
+            const have = ownedTotal(f), d = FLOWER_CATALOG[f], usedMut = plan.picks.filter(p => p.f === f && p.mut);
+            return `<div class="ord-item tc-${d.rarity}"><div class="ord-img">${flowerImg(f, 62)}</div>
+                <div class="ord-info"><b>${f}</b> <span class="rar rar-${d.rarity}">${d.rarity}</span>
+                <div class="meter" style="--m1:${have >= q ? "#a9dbb8" : "#ffc2d6"};--m2:${have >= q ? "#7fcf9c" : "#f6a6c1"}"><i style="width:${Math.min(100, (have / q) * 100)}%"></i></div>
+                <div class="cnt" style="color:${have >= q ? "#2f8f62" : "#c4466b"}">${have >= q ? "✓ " : ""}${have} / ${q} in basket · ${d.price}c each</div>
+                ${usedMut.length ? `<span class="bonus">${usedMut.map(p => `${MUTATIONS[p.mut].icon} ${p.n}x ${MUTATIONS[p.mut].name}`).join(", ")}</span>` : ""}</div></div>`;
+        }).join("");
+        const reward = ok ? plan.coins : base;
+        return `<div class="ord-card ${ok ? "ready" : ""}"><span class="ord-pin"></span>
+            <div class="ord-top"><div class="avatar">${face}</div><div><div class="who">${who}</div><div class="kind">${orderType(o) === "bouquet" ? "Wants a custom bouquet" : "Wants a single flower"}</div></div>
+            <span class="ord-badge">${ok ? "Ready to deliver!" : "Gathering..."}</span></div>
+            <div class="ord-items">${items}</div>
+            <div class="ord-foot"><div class="ord-reward"><span>🪙 +${reward} coins</span>${ok && reward > base ? `<span class="bonus">✨ +${reward - base} mutation bonus</span>` : ""}<span>⭐ +${orderXP(o)} XP</span></div>
+            <button onclick="deliverOrder(${o.id})" class="btn-pastel btn-mint px-6 py-2.5 text-sm ${ok ? "" : "btn-disabled"}">Deliver order</button></div></div>`;
     }).join("");
+    c.innerHTML = `<div class="inv-stats" style="grid-template-columns:repeat(3,1fr)">
+        <div class="inv-stat" style="--s2:#ffe6ef;--s3:#f4c6d6"><span class="ic">📋</span><div><b>${activeCustomerOrders.length}</b><span class="l">Open requests</span></div></div>
+        <div class="inv-stat" style="--s2:#e5f7ea;--s3:#a6dcb8"><span class="ic">✅</span><div><b>${ready}</b><span class="l">Ready to deliver</span></div></div>
+        <div class="inv-stat" style="--s2:#fff3cc;--s3:#f3d98a"><span class="ic">🪙</span><div><b>${potential}</b><span class="l">Coins waiting</span></div></div></div>
+        <div class="ord-grid">${cards}</div>`;
 }
  
 // ---------------------------------------------------------------
@@ -753,31 +903,186 @@ function renderStalls() {
     const s = document.getElementById("seed-badge"), t = document.getElementById("tool-badge");
     if (s) s.textContent = `${seedCount} in stock`;
     if (t) t.textContent = `${toolCount} in stock`;
+    renderAlmanacBadge();
 }
  
-// ---- Calendar ----
+// ---------------------------------------------------------------
+// Special events & flower mutations
+//   Butterfly / Rainbow / Cotton Candy events are rolled at random for each player's month.
+//   During an event, magic lands on random planted flowers and mutates them (they sell for more).
+// ---------------------------------------------------------------
+const EVENTS = {
+    butterfly: { name: "Butterfly Event", icon: "🦋", color: "#ffd1ea", tint: "rgba(255,196,228,0.62)", text: "Butterflies flutter across the garden and land on random flowers, mutating them!" },
+    rainbow:   { name: "Rainbow Event",   icon: "🌈", color: "#ffe6b8", tint: "rgba(255,226,170,0.62)", text: "A rainbow arches over the garden and sprinkles magic on random flowers!" },
+    candy:     { name: "Cotton Candy Event", icon: "🍭", color: "#ffc9e1", tint: "rgba(255,186,220,0.62)", text: "Sweet cotton candy drifts down and sugar-coats random flowers!" }
+};
+const MUTATIONS = {
+    pollinated:  { name: "Pollinated",        icon: "🦋", mult: 1.5 },
+    winged:      { name: "Butterfly Blessed", icon: "🦋", mult: 2.5 },
+    shimmer:     { name: "Shimmering",        icon: "✨", mult: 2 },
+    prismatic:   { name: "Prismatic",         icon: "🌈", mult: 3.5 },
+    sugarcoated: { name: "Sugarcoated",       icon: "🍬", mult: 2 },
+    cottoncandy: { name: "Cotton Candy",      icon: "🍭", mult: 4 }
+};
+const EVENT_MUT = { butterfly: [["pollinated", 0.7], ["winged", 0.3]], rainbow: [["shimmer", 0.65], ["prismatic", 0.35]], candy: [["sugarcoated", 0.65], ["cottoncandy", 0.35]] };
+let currentEvent = null, eventTimer = null;
+let mutInventory = {}; // "Rose|prismatic": how many harvested
+const mutPrice = (f, key) => Math.round(FLOWER_CATALOG[f].price * (key ? MUTATIONS[key].mult : 1));
+ 
+// Roll this player's events for the month (never on day 1, never on earthquake days)
+function pickEvents(sched) {
+    const days = sched.filter(w => w.day > 1 && w.effect !== "soil_damage").map(w => w.day);
+    for (let i = days.length - 1; i > 0; i--) { const j = rand(0, i);[days[i], days[j]] = [days[j], days[i]]; }
+    const kinds = ["butterfly", "rainbow", "candy"].sort(() => Math.random() - 0.5);
+    days.slice(0, rand(6, 8)).forEach((d, i) => { sched[d - 1].event = kinds[i % 3]; });
+}
+ 
+function applyDayEvent(announce) {
+    currentEvent = (currentWeather && currentWeather.event) || null;
+    clearTimeout(eventTimer);
+    if (!currentEvent) return;
+    if (announce) showToast(`${EVENTS[currentEvent].icon} ${EVENTS[currentEvent].name} begins today!`);
+    scheduleEventTick(true);
+}
+ 
+function scheduleEventTick(first) {
+    clearTimeout(eventTimer);
+    if (!currentEvent) return;
+    eventTimer = setTimeout(() => { eventTick(); scheduleEventTick(); }, first ? 2500 + Math.random() * 2000 : 4500 + Math.random() * 4500);
+}
+ 
+// Every few seconds the event picks ONE random flower (not every tile gets one)
+function eventTick() {
+    if (eodOpen || !currentEvent) return;
+    const pool = Object.keys(gardenGridState).filter(k => { const p = gardenGridState[k]; return p && !p.damaged && !p.mutation && !p.incoming; });
+    if (!pool.length || Math.random() < 0.25) return;
+    const pos = pool[rand(0, pool.length - 1)], kind = currentEvent;
+    gardenGridState[pos].incoming = true;
+    playEventActor(kind, pos, () => applyMutation(pos, kind));
+}
+ 
+function applyMutation(pos, kind) {
+    const plant = gardenGridState[pos];
+    if (!plant) return;
+    delete plant.incoming;
+    if (plant.damaged || plant.mutation) return;
+    let roll = Math.random(), acc = 0, key = EVENT_MUT[kind][0][0];
+    for (const [k, c] of EVENT_MUT[kind]) { acc += c; if (roll < acc) { key = k; break; } }
+    plant.mutation = key;
+    const m = MUTATIONS[key];
+    showToast(`${m.icon} Your ${plant.name} mutated: ${m.name}! Sells for x${m.mult}`);
+    pushAction(`${plant.name} became ${m.name} (x${m.mult})`);
+    renderTile(pos);
+}
+ 
+// ---- Flying event actors (butterfly lands on a flower, rainbow orb / candy puff drops down) ----
+function tileCenter(pos) {
+    const view = document.getElementById("view-greenhouse");
+    if (!view || view.classList.contains("hidden")) return null;
+    const tile = document.querySelector(`#garden-grid > [data-pos="${pos}"]`);
+    if (!tile) return null;
+    const r = tile.getBoundingClientRect();
+    if (!r.width || r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) return null;
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+ 
+function playEventActor(kind, pos, done) {
+    const tc = tileCenter(pos);
+    if (!tc) { done(); return; } // the garden is off-screen: the mutation still happens
+    let layer = document.getElementById("actor-layer");
+    if (!layer) { layer = document.createElement("div"); layer.id = "actor-layer"; document.body.appendChild(layer); }
+    const el = document.createElement("div");
+    el.className = "actor";
+    let x0, y0, flight, hold;
+    if (kind === "butterfly") {
+        x0 = Math.random() < 0.5 ? -80 : innerWidth + 80; y0 = 40 + Math.random() * innerHeight * 0.45; flight = 2700; hold = 2200;
+        el.innerHTML = `<img class="ba" src="assets/butterfly-${rand(1, 8)}.png" alt="" onerror="this.outerHTML='<span style=\\'font-size:44px\\'>🦋</span>'">`;
+    } else if (kind === "rainbow") {
+        x0 = innerWidth * 0.5 + rand(-140, 140); y0 = -40; flight = 1900; hold = 250;
+        el.innerHTML = '<div class="orb-rainbow"></div>';
+    } else {
+        x0 = tc.x + rand(-170, 170); y0 = -40; flight = 2300; hold = 250;
+        el.innerHTML = '<div class="orb-candy"></div>';
+    }
+    el.style.setProperty("--dur", flight / 1000 + "s");
+    el.style.transform = `translate(${x0}px,${y0}px)`;
+    layer.appendChild(el);
+    requestAnimationFrame(() => requestAnimationFrame(() => { el.style.transform = `translate(${tc.x}px,${tc.y - 10}px)`; }));
+    setTimeout(() => {
+        el.classList.add("landed");
+        setTimeout(() => {
+            const c = tileCenter(pos) || tc;
+            spawnBurst(c.x, c.y, kind);
+            done();
+            if (kind === "butterfly") { el.classList.remove("landed"); el.style.setProperty("--dur", "2.2s"); el.style.transform = `translate(${innerWidth + 90}px,-60px)`; setTimeout(() => el.remove(), 2300); }
+            else { el.style.opacity = 0; setTimeout(() => el.remove(), 700); }
+        }, hold);
+    }, flight);
+}
+ 
+function spawnBurst(x, y, kind) {
+    const glyphs = { rainbow: ["✨", "🌈", "⭐"], candy: ["🍬", "🍭", "💖"] }[kind];
+    for (let i = 0; i < 9; i++) {
+        const s = document.createElement("span");
+        s.className = "burst";
+        s.innerHTML = glyphs ? glyphs[i % glyphs.length] : flowerImg(Object.keys(FLOWER_CATALOG)[rand(0, 9)], 18);
+        const a = Math.random() * 6.28, d = 36 + Math.random() * 46;
+        s.style.cssText = `left:${x}px;top:${y}px;--dx:${Math.cos(a) * d}px;--dy:${Math.sin(a) * d - 14}px`;
+        document.body.appendChild(s);
+        setTimeout(() => s.remove(), 1000);
+    }
+}
+ 
+// Tiny petals pop out wherever you click
+document.addEventListener("pointerdown", e => {
+    if (e.target.closest && e.target.closest("input,select,textarea")) return;
+    for (let i = 0; i < 5; i++) {
+        const s = document.createElement("span");
+        s.className = "click-petal";
+        s.innerHTML = flowerImg(Object.keys(FLOWER_CATALOG)[rand(0, 9)], 16);
+        const a = Math.random() * 6.28, d = 24 + Math.random() * 34;
+        s.style.cssText = `left:${e.clientX}px;top:${e.clientY}px;--dx:${Math.cos(a) * d}px;--dy:${Math.sin(a) * d - 14}px`;
+        document.body.appendChild(s);
+        setTimeout(() => s.remove(), 800);
+    }
+});
+ 
+// ---- Calendar (tulip wall calendar, now with events) ----
 function renderCalendarWidget() {
     const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
     set("cal-day-num", currentDay);
     set("cal-icon", currentWeather.icon);
     set("cal-name", currentWeather.name);
     const next = thirtyDayWeatherSchedule[currentDay % 30];
-    set("cal-sub", next ? `Tomorrow: ${next.icon} ${next.name}` : "Tap to see the month");
+    set("cal-sub", next ? `Tomorrow: ${next.icon} ${next.name}${next.event ? " " + EVENTS[next.event].icon : ""}` : "Tap to see the month");
+    const ev = document.getElementById("cal-event");
+    if (ev) { const e = currentWeather.event && EVENTS[currentWeather.event]; ev.style.display = e ? "" : "none"; ev.textContent = e ? `${e.icon} ${e.name} today!` : ""; }
 }
  
 function buildCalendarModal() {
     const cells = thirtyDayWeatherSchedule.map(w => {
         const cls = w.day < currentDay ? "past" : w.day === currentDay ? "today" : "";
-        return `<div class="cal-cell ${cls}" title="${w.name}: ${WEATHER_INFO[w.effect].text}">
-            ${w.day === currentDay ? '<span class="tdy">Today</span>' : ""}${w.day < currentDay ? '<span class="chk">✓</span>' : ""}
+        const e = w.event && EVENTS[w.event];
+        return `<div class="cal-cell w-${w.effect} ${e ? "ev ev-" + w.event : ""} ${cls}" title="${w.name}: ${WEATHER_INFO[w.effect].text}${e ? " | " + e.name : ""}">
+            ${w.day === currentDay ? '<span class="tdy">Today</span>' : ""}${w.day < currentDay ? '<span class="chk">✓</span>' : ""}${e ? `<span class="evb">${e.icon}</span>` : ""}
             <span class="d">${w.day}</span><span class="i">${w.icon}</span><span class="n">${w.name}</span></div>`;
-    }).join("");
+    }).join("") + '<div class="cal-cell empty"></div>'.repeat(5);
     const legend = [["☀️ Sunny", "normal"], ["🌧️ Rain", "auto_water"], ["💨 Windy", "speed_boost"], ["🔥 Heatwave", "dry_fast"], ["🌋 Earthquake", "soil_damage"]]
-        .map(([n, e]) => `<div class="text-[11px] font-bold"><span style="color:var(--plum)">${n}</span> <span style="color:var(--ink-soft)">${WEATHER_INFO[e].text}</span></div>`).join("");
+        .map(([n, e]) => `<div class="lg w-${e}"><b>${n}</b>${WEATHER_INFO[e].text}</div>`).join("");
+    const evLegend = Object.entries(EVENTS).map(([k, e]) => `<div class="lg evl" style="--ec:${e.color}"><b>${e.icon} ${e.name}</b>${e.text}
+        <small>${EVENT_MUT[k].map(([m]) => `${MUTATIONS[m].name} x${MUTATIONS[m].mult}`).join(" · ")}</small></div>`).join("");
+    const count = thirtyDayWeatherSchedule.filter(w => w.event).length;
     return {
-        title: "Bloom Calendar",
-        sub: `Day ${currentDay} of 30 · the weather for the whole month is rolled at random.`,
-        html: `<div class="cal-grid pt-3">${cells}</div><div class="mt-4 p-3 rounded-2xl space-y-1" style="background:rgba(255,255,255,.55)">${legend}</div>`
+        title: "",
+        sub: "",
+        html: `<div class="cal-head"><div class="tl"></div>
+            <div class="mid"><div class="kicker">BLOOM INTO A BRIGHTER TOMORROW</div><div class="big">Bloom Month</div>
+            <div class="text-xs font-bold" style="color:var(--ink-soft)">Day ${currentDay} of 30 · weather and ${count} special events are rolled at random for you</div></div><div class="tl r"></div></div>
+            <div class="cal-sheet"><div class="cal-art"><div class="tag">Good things<br>grow ♡</div></div>
+            <div class="cal-main2"><div class="cal-title">THE BLOOM MONTH</div>
+            <div class="cal-week"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>
+            <div class="cal-grid7">${cells}</div></div></div>
+            <div class="legend"><h5>Weather</h5>${legend}<h5>Special events &amp; mutations</h5>${evLegend}</div>`
     };
 }
  
@@ -786,37 +1091,195 @@ function buildSeedModal() {
     const order = Object.keys(TIERS);
     const chips = order.map(t => unlockedTiers[t]
         ? `<span class="tier-chip open">${TIERS[t].icon} ${t[0] + t.slice(1).toLowerCase()} ✓</span>`
-        : `<button onclick="unlockTier('${t}')" class="tier-chip cursor-pointer ${playerCoins < TIERS[t].cost ? "btn-disabled" : ""}">🔓 ${t[0] + t.slice(1).toLowerCase()} · ${TIERS[t].cost}c</button>`).join("");
+        : `<button onclick="unlockTier('${t}')" class="tier-chip ${playerCoins < TIERS[t].cost ? "btn-disabled" : ""}">🔓 Unlock ${t[0] + t.slice(1).toLowerCase()} · ${TIERS[t].cost}c</button>`).join("");
     const names = Object.keys(shopStock.seeds).sort((a, b) => order.indexOf(FLOWER_CATALOG[a].rarity) - order.indexOf(FLOWER_CATALOG[b].rarity));
-    const rows = names.map(name => {
-        const d = FLOWER_CATALOG[name], open = unlockedTiers[d.rarity], left = shopStock.seeds[name], off = !open || left <= 0;
-        const action = !open ? `<span class="text-[11px] font-bold" style="color:var(--rose-deep)">🔒 Unlock ${d.rarity.toLowerCase()} first</span>`
-            : left <= 0 ? `<span class="text-[11px] font-bold" style="color:var(--ink-soft)">Sold out</span>`
-            : `<div class="flex gap-1.5"><button onclick="buySeed('${name}',1)" class="btn-pastel px-3 py-1.5 text-[11px]">Buy 1 · ${seedCost(name)}c</button>
-               <button onclick="buySeed('${name}',5)" class="btn-pastel btn-sky px-3 py-1.5 text-[11px]">x${Math.min(5, left)} · ${seedCost(name) * Math.min(5, left)}c</button></div>`;
-        return `<div class="shop-row ${!open ? "locked" : left <= 0 ? "soldout" : ""}">
-            <div class="flex items-center gap-3"><span class="text-3xl">${open ? d.emoji : "🔒"}</span>
-            <div><div class="font-bold text-sm" style="color:var(--plum)">${name} <span class="rar rar-${d.rarity}">${d.rarity}</span></div>
-            <div class="text-[11px] font-semibold" style="color:var(--ink-soft)">Sells for ${d.price}c · In stock: <b>${left}</b> · You own: ${seedStock[name] || 0}</div></div></div>${action}</div>`;
+    const cards = names.map(name => {
+        const d = FLOWER_CATALOG[name], open = unlockedTiers[d.rarity], left = shopStock.seeds[name];
+        const btns = !open ? "" : left <= 0 ? "" : `<button onclick="buySeed('${name}',1)" class="btn-pastel px-3 py-1.5 text-[11px]">Buy 1</button>
+            <button onclick="buySeed('${name}',5)" class="btn-pastel btn-sky px-3 py-1.5 text-[11px]">Buy ${Math.min(5, left)}</button>`;
+        return `<div class="item-card tc-${d.rarity} ${!open ? "locked" : left <= 0 ? "soldout" : ""}">
+            <span class="rar rar-${d.rarity}">${d.rarity}</span><span class="stock">x${left}</span>
+            <div class="bubble">${flowerImg(name, 62)}</div><h4>${name}</h4>
+            <div class="meta">Grows into a bloom worth ${d.price}c<br>You own ${seedStock[name] || 0} seeds</div>
+            <div class="price">🪙 ${seedCost(name)} each</div><div class="btns">${btns}</div></div>`;
     }).join("");
     return {
         title: "Seed Shop",
-        sub: `Today's shelf is random and restocks every dawn (Day ${currentDay + 1}). Unlock a tier to buy its seeds.`,
-        html: `<div class="flex gap-2 flex-wrap mb-3">${chips}</div>${rows || "<p class='text-sm font-bold p-3'>The shelves are empty today.</p>"}`
+        sub: `Today's shelf is random and restocks every dawn (Day ${currentDay % 30 + 1}).`,
+        html: `<div class="shop-hero" style="--aw:#f7a9c3"><div class="big">🌱🧺🌸</div>Fresh seeds from the meadow, picked just for you.</div>
+            <div class="tier-strip">${chips}</div>
+            <div class="shop-grid">${cards || "<p class='text-sm font-bold p-3'>The shelves are empty today.</p>"}</div>`
     };
 }
  
 // ---- Tool shop ----
+const TOOL_TIER = { water: "RARE", fert: "UNCOMMON", sprinkler: "LEGENDARY", plots: "COMMON", repair: "MYTHICAL" };
 function buildToolModal() {
-    const rows = Object.keys(TOOL_META).map(k => {
+    const cards = Object.keys(TOOL_META).map(k => {
         const m = TOOL_META[k], left = shopStock.tools[k];
-        return `<div class="shop-row ${left <= 0 ? "soldout" : ""}">
-            <div class="flex items-center gap-3"><span class="text-3xl">${m.icon}</span>
-            <div><div class="font-bold text-sm" style="color:var(--plum)">${m.name}</div>
-            <div class="text-[11px] font-semibold" style="color:var(--ink-soft)">${toolDesc(k)} · In stock: <b>${left}</b></div></div></div>
-            ${left <= 0 ? `<span class="text-[11px] font-bold" style="color:var(--ink-soft)">Sold out</span>` : `<button onclick="buyTool('${k}')" class="btn-pastel btn-mint px-4 py-1.5 text-[11px]">Buy · ${toolCost(k)}c</button>`}</div>`;
+        return `<div class="item-card tc-${TOOL_TIER[k]} ${left <= 0 ? "soldout" : ""}">
+            <span class="stock">x${left}</span><div class="bubble">${m.icon}</div><h4>${m.name}</h4>
+            <div class="meta">${toolDesc(k)}</div><div class="price">🪙 ${toolCost(k)}</div>
+            <div class="btns">${left <= 0 ? "" : `<button onclick="buyTool('${k}')" class="btn-pastel btn-mint px-5 py-1.5 text-[11px]">Buy</button>`}</div></div>`;
     }).join("");
-    return { title: "Tool Shop", sub: `Quantities are random and restock every dawn (Day ${currentDay + 1}).`, html: rows };
+    return {
+        title: "Tool Shop",
+        sub: `Quantities are random and restock every dawn (Day ${currentDay % 30 + 1}).`,
+        html: `<div class="shop-hero" style="--aw:#a9dbb8"><div class="big">🧰🪣✂️</div>Handy things for happy gardens.</div><div class="shop-grid">${cards}</div>`
+    };
+}
+ 
+// ---------------------------------------------------------------
+// Flower Almanac: a HIERARCHICAL TREE with tree TRAVERSALS
+//   Garden Almanac (root) -> Tiers -> Flowers
+// Preorder / Postorder / Level-order. If you ran Topic 4 in the code
+// lab, YOUR Python traversal runs the walk. Otherwise JS does it.
+// ---------------------------------------------------------------
+let discovered = {}, claimedRewards = {};
+const almanac = { selected: null, order: [], step: 0, mode: null, src: "", timer: null };
+const ALM_REWARD = { COMMON: 50, UNCOMMON: 120, RARE: 250, LEGENDARY: 500, MYTHICAL: 1000, "Garden Almanac": 3000 };
+const TRAV_TEXT = {
+    pre: "Preorder (DFS): visit the node FIRST, then each child. Reads the catalog top-down.",
+    post: "Postorder (DFS): visit the children FIRST, then the node. This is how collections are checked: a tier is complete only after all its flowers are.",
+    level: "Level-order (BFS): visit the tree row by row using a queue."
+};
+ 
+function buildCatalogTree() {
+    return {
+        id: "Garden Almanac", label: "Almanac", icon: "📖", kind: "root",
+        children: Object.keys(TIERS).map(t => ({
+            id: t, label: t[0] + t.slice(1).toLowerCase(), icon: TIERS[t].icon, kind: "tier",
+            children: Object.entries(FLOWER_CATALOG).filter(([, d]) => d.rarity === t).map(([n, d]) => ({ id: n, label: n, icon: d.emoji, kind: "flower", children: [] }))
+        }))
+    };
+}
+ 
+function getCatalogJSON() {
+    return JSON.stringify(Object.keys(TIERS).map(t => ({
+        tier: t, icon: TIERS[t].icon,
+        flowers: Object.entries(FLOWER_CATALOG).filter(([, d]) => d.rarity === t).map(([name, d]) => ({ name, emoji: d.emoji }))
+    })));
+}
+ 
+const preorderJS = (n, out = []) => { out.push(n.id); n.children.forEach(c => preorderJS(c, out)); return out; };
+const postorderJS = (n, out = []) => { n.children.forEach(c => postorderJS(c, out)); out.push(n.id); return out; };
+const levelOrderJS = r => { const out = [], q = [r]; while (q.length) { const n = q.shift(); out.push(n.id); q.push(...n.children); } return out; };
+ 
+function runTraversal(mode) {
+    const tree = buildCatalogTree();
+    let order = null, src = "JavaScript";
+    try {
+        const fn = pyodideInstance && pyodideInstance.globals.get("catalog_traverse");
+        if (fn) { const res = fn(mode); order = Array.from(res.toJs ? res.toJs() : res); src = "your Python code 🐍"; if (res.destroy) res.destroy(); fn.destroy(); }
+    } catch (e) { order = null; }
+    if (!order) order = { pre: preorderJS, post: postorderJS, level: levelOrderJS }[mode](tree);
+    return { order, src };
+}
+ 
+// Postorder idea: a node is complete only when ALL of its children are complete
+const isComplete = n => n.kind === "flower" ? !!discovered[n.id] : n.children.every(isComplete);
+const findNode = (n, id) => n.id === id ? n : n.children.map(c => findNode(c, id)).find(Boolean);
+const pathTo = (n, id, p = []) => { p = [...p, n]; if (n.id === id) return p; for (const c of n.children) { const r = pathTo(c, id, p); if (r) return r; } return null; };
+const discoveredCount = () => Object.keys(discovered).length;
+ 
+function renderAlmanacBadge() {
+    const b = document.getElementById("almanac-badge");
+    if (b) b.textContent = `${discoveredCount()} / ${Object.keys(FLOWER_CATALOG).length} discovered`;
+}
+ 
+function discoverFlower(name) {
+    if (discovered[name]) return;
+    discovered[name] = true;
+    playerXP += 20;
+    showToast(`📖 Almanac: you discovered ${name}! +20 XP`);
+    pushAction(`Discovered ${name} in the Almanac`);
+}
+ 
+function selectNode(id) { almanac.selected = id; refreshModal(); }
+ 
+function claimReward(id) {
+    const tree = buildCatalogTree(), node = findNode(tree, id);
+    if (!node || !isComplete(node) || claimedRewards[id]) return;
+    claimedRewards[id] = true;
+    playerCoins += ALM_REWARD[id];
+    showToast(`📖 Collection complete! +${ALM_REWARD[id]} coins 🪙`);
+    pushAction(`Completed the ${node.label} collection (+${ALM_REWARD[id]}c)`);
+    updatePlayerStats();
+}
+ 
+function startTraversal(mode) {
+    if (almanac.timer) return;
+    const { order, src } = runTraversal(mode);
+    Object.assign(almanac, { mode, order, src, step: 0 });
+    pushAction(`Walked the almanac tree (${mode})`);
+    refreshModal();
+    almanac.timer = setInterval(() => {
+        almanac.step++;
+        if (almanac.step >= order.length) { clearInterval(almanac.timer); almanac.timer = null; }
+        refreshModal();
+    }, 480);
+}
+ 
+function buildAlmanacModal() {
+    const tree = buildCatalogTree();
+    const pos = {}, leaves = [];
+    tree.children.forEach(t => t.children.forEach(f => leaves.push(f)));
+    leaves.forEach((f, k) => { pos[f.id] = { x: 60 + (880 * k) / (leaves.length - 1), y: 305 }; });
+    tree.children.forEach(t => { pos[t.id] = { x: t.children.reduce((s, c) => s + pos[c.id].x, 0) / t.children.length, y: 180 }; });
+    pos[tree.id] = { x: tree.children.reduce((s, c) => s + pos[c.id].x, 0) / tree.children.length, y: 55 };
+ 
+    const visited = almanac.order.slice(0, almanac.step), visiting = almanac.order[almanac.step - 1];
+    const R = { root: 32, tier: 28, flower: 25 };
+    const nodes = [], edges = [];
+    const walk = (n, parent) => {
+        const p = pos[n.id];
+        if (parent) { const q = pos[parent.id], my = (q.y + p.y) / 2; edges.push(`<path class="tedge ${visited.includes(n.id) ? "on" : ""}" d="M${q.x} ${q.y + R[parent.kind]} C${q.x} ${my}, ${p.x} ${my}, ${p.x} ${p.y - R[n.kind]}"/>`); }
+        const unknown = n.kind === "flower" && !discovered[n.id], done = isComplete(n) && n.kind !== "flower";
+        const cls = ["tnode", unknown ? "unknown" : "", done ? "done" : "", visiting === n.id ? "visiting" : "", almanac.selected === n.id ? "selected" : ""].join(" ");
+        const c = n.kind === "flower" ? ({ COMMON: "#b9cdbf", UNCOMMON: "#7fcf9c", RARE: "#7fb4ec", LEGENDARY: "#efbf4f", MYTHICAL: "#d58be8" })[FLOWER_CATALOG[n.id].rarity] : "#f08cb0";
+        const idx = visited.indexOf(n.id);
+        nodes.push(`<g class="${cls}" style="--c:${c}" onclick="selectNode('${n.id}')" transform-origin="${p.x} ${p.y}">
+            <circle class="disc" cx="${p.x}" cy="${p.y}" r="${R[n.kind]}"/>${n.kind === "flower" && !unknown ? `<image href="${imgSrc(n.id)}" x="${p.x - 21}" y="${p.y - 21}" width="42" height="42" preserveAspectRatio="xMidYMid meet" style="pointer-events:none"/>` : `<text class="em" x="${p.x}" y="${p.y + 1}">${unknown ? "❔" : n.icon}</text>`}
+            <text class="lb" x="${p.x}" y="${p.y + R[n.kind] + 16}">${unknown ? "???" : n.label}</text>
+            ${idx >= 0 ? `<circle class="ord" cx="${p.x + R[n.kind] - 3}" cy="${p.y - R[n.kind] + 3}" r="11"/><text class="on" x="${p.x + R[n.kind] - 3}" y="${p.y - R[n.kind] + 4}">${idx + 1}</text>` : ""}</g>`);
+        n.children.forEach(ch => walk(ch, n));
+    };
+    walk(tree, null);
+ 
+    const running = !!almanac.timer;
+    const bar = [["pre", "Preorder (DFS)"], ["post", "Postorder (DFS)"], ["level", "Level-order (BFS)"]]
+        .map(([m, l]) => `<button onclick="startTraversal('${m}')" class="btn-pastel ${m === "post" ? "btn-sky" : m === "level" ? "btn-mint" : ""} px-4 py-2 text-xs ${running ? "btn-disabled" : ""}">${l}</button>`).join("");
+    const label = id => { const n = findNode(tree, id); return n.kind === "flower" && !discovered[id] ? "???" : n.label; };
+    const chips = visited.map(id => `<span>${label(id)}</span>`).join("");
+ 
+    let detail = `<div class="detail-card"><span class="em">🌳</span><div class="text-xs font-bold" style="color:var(--ink-soft)">Tap any node to inspect it. Harvest a flower to discover it, and finish a whole tier to claim a reward.</div></div>`;
+    const sel = almanac.selected && findNode(tree, almanac.selected);
+    if (sel) {
+        const path = pathTo(tree, sel.id).map(n => n.label).join(" → ");
+        const known = sel.kind !== "flower" || discovered[sel.id], complete = isComplete(sel);
+        let body, extra = "";
+        if (sel.kind === "flower") {
+            const d = FLOWER_CATALOG[sel.id];
+            body = known ? `${d.rarity} · sells for ${d.price}c · blooms in about ${TIERS[d.rarity].sec * 4}s of growing` : "Not discovered yet. Harvest one to reveal it!";
+        } else {
+            const total = sel.kind === "root" ? leaves.length : sel.children.length;
+            const have = sel.kind === "root" ? leaves.filter(f => discovered[f.id]).length : sel.children.filter(isComplete).length;
+            body = `${have} / ${total} ${sel.kind === "root" ? "flowers" : "flowers"} discovered`;
+            extra = claimedRewards[sel.id] ? `<span class="text-xs font-bold" style="color:#5da479">✓ Reward claimed</span>`
+                : `<button onclick="claimReward('${sel.id}')" class="btn-pastel btn-mint px-4 py-2 text-xs ${complete ? "" : "btn-disabled"}">${complete ? `Claim +${ALM_REWARD[sel.id]} coins` : `Reward: ${ALM_REWARD[sel.id]} coins`}</button>`;
+        }
+        detail = `<div class="detail-card"><span class="em">${known ? (sel.kind === "flower" ? flowerImg(sel.id, 64) : sel.icon) : "❔"}</span><div class="flex-1"><div class="font-bold title-font text-xl">${known ? sel.label : "???"}</div>
+            <div class="text-xs font-semibold" style="color:var(--ink-soft)">Path from the root: ${path}</div><div class="text-xs font-bold mt-1">${body}</div></div>${extra}</div>`;
+    }
+ 
+    return {
+        title: "Flower Almanac",
+        sub: "A hierarchical tree: Almanac → Tiers → Flowers. Walk it with a traversal.",
+        html: `<div class="tree-box"><svg viewBox="0 0 1000 365" role="img" aria-label="Flower catalog tree">${edges.join("")}${nodes.join("")}</svg></div>
+            <div class="trav-bar">${bar}</div>
+            <p class="text-center text-xs font-semibold" style="color:var(--ink-soft)">${almanac.mode ? TRAV_TEXT[almanac.mode] + ` <b>(walked by ${almanac.src})</b>` : "Pick a traversal to watch the walk. Numbers show the visiting order."}</p>
+            <div class="trav-chips mt-2">${chips}</div>${detail}`
+    };
 }
  
 // ---- Pop-up window plumbing ----
@@ -828,15 +1291,18 @@ function openModal(name) {
  
 function closeModal() {
     openModalName = null;
+    if (almanac.timer) { clearInterval(almanac.timer); almanac.timer = null; }
     document.getElementById("modal").classList.remove("open");
 }
  
 function refreshModal(fresh) {
     if (!openModalName) return;
-    const build = { calendar: buildCalendarModal, seeds: buildSeedModal, tools: buildToolModal }[openModalName];
+    const build = { calendar: buildCalendarModal, seeds: buildSeedModal, tools: buildToolModal, almanac: buildAlmanacModal }[openModalName];
     const body = document.getElementById("modal-body"), scroll = fresh ? 0 : body.scrollTop;
     const m = build();
     document.getElementById("modal-title").textContent = m.title;
+    document.getElementById("modal-title").style.display = m.title ? "" : "none";
+    document.getElementById("modal-sub").style.display = m.sub ? "" : "none";
     document.getElementById("modal-sub").textContent = m.sub;
     body.innerHTML = m.html;
     body.scrollTop = scroll;
@@ -869,6 +1335,7 @@ function triggerEndOfDayModal() {
     currentDay++;
     if (currentDay > 30) { currentDay = 1; initializeWeatherCalendar(); }
     currentWeather = thirtyDayWeatherSchedule[currentDay - 1];
+    applyDayEvent(false);
  
     if (currentWeather.effect === "auto_water") {
         Object.keys(gardenGridState).forEach(k => {
@@ -891,52 +1358,134 @@ function triggerEndOfDayModal() {
     }
     updateClimateQueueUI();
  
-    document.getElementById("eod-title").innerText = `Day ${closedDay} closed`;
-    document.getElementById("eod-coins").innerText = `+${dailyStats.coinsEarned}`;
-    document.getElementById("eod-sales").innerText = dailyStats.salesCount;
-    document.getElementById("eod-harvests").innerText = dailyStats.harvestCount;
-    eodOpen = true;
-    document.getElementById("eod-modal").classList.remove("hidden");
+    showCutscene(closedDay);
 }
  
 function closeEndOfDayModal() {
-    document.getElementById("eod-modal").classList.add("hidden");
+    document.getElementById("eod-modal").classList.remove("open");
     eodOpen = false;
     dailyStats = { coinsEarned: 0, salesCount: 0, harvestCount: 0 };
     timeMinutes = 360;
     updateClockDisplay();
     restockShops(true);
-    showToast(`Welcome to Day ${currentDay} (${currentWeather.name})! 🌱`);
+    const refilled = toolsInventory["Water Charges"] < DAILY_WATER;
+    toolsInventory["Water Charges"] = Math.max(toolsInventory["Water Charges"], DAILY_WATER);
+    showToast(`Welcome to Day ${currentDay} (${currentWeather.name})! 🌱${refilled ? " Your watering can is back to " + DAILY_WATER + " 💧" : ""}`);
+    if (currentEvent) showToast(`${EVENTS[currentEvent].icon} ${EVENTS[currentEvent].name} begins today!`);
+    updatePlayerStats();
 }
  
 // ---------------------------------------------------------------
 // UI helpers
 // ---------------------------------------------------------------
+// ---------------------------------------------------------------
+// Garden Journal: a flipping book. Undo crosses lines out in ink.
+// ---------------------------------------------------------------
+let journal = [], journalId = 0, journalSpread = 0, flipping = false;
+const PER_PAGE = 5, PER_SPREAD = 10;
+const escHTML = t => String(t).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+const maxSpread = () => Math.max(0, Math.floor((journal.length - 1) / PER_SPREAD));
+ 
 function pushAction(action) {
     displayActionHistory.push(action);
-    if (displayActionHistory.length > 8) displayActionHistory.shift();
-    renderActionStack();
+    if (displayActionHistory.length > 60) displayActionHistory.shift();
+    journal.push({ id: ++journalId, text: action, day: currentDay, struck: false, fresh: false });
+    if (journal.length > 150) journal.shift();
+    if (journalSpread !== maxSpread()) flipTo(maxSpread()); else renderJournal();
 }
  
-function renderActionStack() {
+function pageHTML(spread, side) {
+    const start = spread * PER_SPREAD + (side === "right" ? PER_PAGE : 0);
+    const items = journal.slice(start, start + PER_PAGE);
+    const title = side === "left" ? "My Garden Diary" : `Day ${items.length ? items[0].day : currentDay}`;
+    let lines = "";
+    for (let i = 0; i < PER_PAGE; i++) {
+        const e = items[i];
+        lines += e
+            ? `<div class="pg-line ${e.struck ? "struck" : ""} ${e.fresh ? "fresh" : ""}"><span class="tag">D${e.day}</span><span class="txt">${escHTML(e.text)}</span></div>`
+            : `<div class="pg-line">${!journal.length && side === "left" && !i ? "Nothing written yet..." : ""}</div>`;
+    }
+    return `<div class="pg-title">${title}</div>${lines}<div class="pg-num">${spread * 2 + (side === "left" ? 1 : 2)}</div>`;
+}
+ 
+function renderJournal() {
     const L = document.getElementById("book-left"), Rt = document.getElementById("book-right");
-    if (!L || !Rt) return;
-    const esc = t => t.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
-    const entries = [...displayActionHistory].reverse();
-    const page = (title, items, offset, num) => `<div class="pg-title">${title}</div>` +
-        Array.from({ length: 4 }, (_, i) => items[i]
-            ? `<div class="pg-line"><span class="pg-n">${offset + i + 1}.</span> ${esc(items[i])}</div>`
-            : `<div class="pg-line">${!offset && !i && !entries.length ? "Nothing written yet..." : ""}</div>`).join("") + `<div class="pg-num">${num}</div>`;
-    L.innerHTML = page(`Today · Day ${currentDay}`, entries.slice(0, 4), 0, 1);
-    Rt.innerHTML = page("Earlier pages", entries.slice(4, 8), 4, 2);
+    if (!L || !Rt || flipping) return;
+    journalSpread = Math.min(journalSpread, maxSpread());
+    L.innerHTML = pageHTML(journalSpread, "left");
+    Rt.innerHTML = pageHTML(journalSpread, "right");
+    document.getElementById("book-label").textContent = `Pages ${journalSpread * 2 + 1}-${journalSpread * 2 + 2} of ${(maxSpread() + 1) * 2}`;
+    document.getElementById("book-prev").disabled = journalSpread <= 0;
+    document.getElementById("book-next").disabled = journalSpread >= maxSpread();
+}
+const renderActionStack = renderJournal;
+ 
+function flipJournal(dir) { flipTo(Math.max(0, Math.min(maxSpread(), journalSpread + dir))); }
+ 
+function flipTo(target) {
+    if (flipping || target === journalSpread) { if (!flipping) renderJournal(); return; }
+    const dir = target > journalSpread ? 1 : -1;
+    const L = document.getElementById("book-left"), Rt = document.getElementById("book-right");
+    const leaf = document.getElementById("book-leaf"), front = document.getElementById("leaf-front"), back = document.getElementById("leaf-back");
+    const newL = pageHTML(target, "left"), newR = pageHTML(target, "right");
+    flipping = true;
+    if (dir > 0) {
+        front.innerHTML = Rt.innerHTML; back.innerHTML = newL; Rt.innerHTML = newR;
+        front.className = "leaf-face front pg right"; back.className = "leaf-face back pg left"; leaf.className = "leaf next";
+    } else {
+        front.innerHTML = L.innerHTML; back.innerHTML = newR; L.innerHTML = newL;
+        front.className = "leaf-face front pg left"; back.className = "leaf-face back pg right"; leaf.className = "leaf prev";
+    }
+    setTimeout(() => { journalSpread = target; leaf.className = "leaf"; flipping = false; renderJournal(); }, 830);
 }
  
 function triggerUndo() {
-    if (displayActionHistory.length) {
-        const undone = displayActionHistory.pop();
-        renderActionStack();
-        showToast(`Undid: ${undone}`);
-    } else showToast("Action stack is empty.");
+    const entry = [...journal].reverse().find(e => !e.struck);
+    if (!entry) { showToast("The journal has nothing left to cross out."); return; }
+    entry.struck = true; entry.fresh = true;
+    displayActionHistory.pop();
+    setTimeout(() => { entry.fresh = false; }, 2000);
+    const spread = Math.floor(journal.indexOf(entry) / PER_SPREAD);
+    if (spread !== journalSpread) flipTo(spread); else renderJournal();
+    showToast(`Crossed out: ${entry.text}`);
+}
+ 
+// ---------------------------------------------------------------
+// Day-end cutscene
+// ---------------------------------------------------------------
+function showCutscene(day) {
+    const earned = dailyStats.coinsEarned;
+    document.getElementById("eod-title").innerText = `Day ${day} closed`;
+    document.getElementById("eod-line").innerText = earned === 0
+        ? "A quiet, sleepy day. The blooms are dreaming of tomorrow."
+        : earned < 150 ? "Petals, pennies and a little bell on the door."
+        : "The shop glowed with happy customers all day long.";
+    document.getElementById("eod-sales").innerText = dailyStats.salesCount;
+    document.getElementById("eod-harvests").innerText = dailyStats.harvestCount;
+    document.getElementById("eod-level").innerText = playerLevel;
+    const info = WEATHER_INFO[currentWeather.effect];
+    document.getElementById("eod-next").innerText = `Tomorrow: ${currentWeather.icon} ${currentWeather.name} · ${info.text} ${currentWeather.event ? EVENTS[currentWeather.event].icon + " " + EVENTS[currentWeather.event].name + "! " : ""}At dawn the shops restock 🧺 and your watering can refills to ${DAILY_WATER} 💧`;
+ 
+    // coins count up
+    const coinsEl = document.getElementById("eod-coins");
+    let shown = 0;
+    coinsEl.innerText = "+0";
+    const step = Math.max(1, Math.ceil(earned / 40));
+    const tick = setInterval(() => { shown = Math.min(earned, shown + step); coinsEl.innerText = `+${shown}`; if (shown >= earned) clearInterval(tick); }, 30);
+ 
+    // falling petals
+    const layer = document.getElementById("petal-layer");
+    layer.innerHTML = "";
+    const glyphs = ["🌸", "🌷", "🌼", "🌺", "✿", "🌹"];
+    for (let i = 0; i < 22; i++) {
+        const s = document.createElement("span");
+        s.className = "petal-fall";
+        s.innerHTML = flowerImg(Object.keys(FLOWER_CATALOG)[i % 10], 20 + (i % 4) * 7);
+        s.style.cssText = `left:${Math.random() * 100}%;font-size:${14 + Math.random() * 18}px;animation-duration:${6 + Math.random() * 6}s;animation-delay:${-Math.random() * 8}s`;
+        layer.appendChild(s);
+    }
+    eodOpen = true;
+    document.getElementById("eod-modal").classList.add("open");
 }
  
 function showToast(msg) {
@@ -951,7 +1500,7 @@ function floatPop(text, kind, el) {
     const r = el.getBoundingClientRect();
     const p = document.createElement("div");
     p.className = `float-pop ${kind}`;
-    p.textContent = text;
+    p.innerHTML = text;
     p.style.left = `${r.left + r.width / 2 - 30}px`;
     p.style.top = `${r.top + 4}px`;
     document.body.appendChild(p);
@@ -1000,20 +1549,29 @@ function switchTab(tab) {
 }
  
 // ---------------------------------------------------------------
-// Living background: dreamy golden-hour garden with visible weather
+// Living background: a different animated scene for every weather & event
+//   Sunny: rays + butterflies | Rain: storm, lightning, puddles | Windy: gusts, flying leaves
+//   Heatwave: glare + wilting flowers | Earthquake: cracks, falling rocks
+//   Butterfly event: sprite butterflies | Rainbow event: glowing rainbow | Cotton candy event: candy land
 // ---------------------------------------------------------------
-const env = { rain: 0, wind: 0, heat: 0, quake: 0, night: 0, cloud: 0.25, gold: 0 };
-const bg = { cv: null, ctx: null, W: 0, H: 0, flowers: [], stones: [], trees: [], far: [], arches: [], bokeh: [], clouds: [], drops: [], splashes: [], petals: [], pollen: [], flies: [], bflies: [], dust: [], pads: [], ripples: [], pond: null };
+const env = { rain: 0, wind: 0, heat: 0, quake: 0, night: 0, cloud: 0.25, gold: 0, evButterfly: 0, evRainbow: 0, evCandy: 0 };
+const bg = { cv: null, ctx: null, W: 0, H: 0, flowers: [], stones: [], trees: [], far: [], arches: [], bokeh: [], clouds: [], drops: [], splashes: [], petals: [], pollen: [], flies: [], bflies: [],
+    dust: [], pads: [], ripples: [], pond: null, fall: [], bf: [], bfImgs: null, pops: [], puffs: [], sprinkles: [], glit: [], streaks: [], cracks: [], rocks: [], lt: { life: 0, x: 0, pts: [] } };
 const PALETTE = ["#ff9fb2", "#ffd1dc", "#fff2a8", "#ffb36b", "#d9b8ff", "#ffffff", "#9fd8ff", "#ff8fab"];
-const LAV = ["#b79be6", "#c9a8f0", "#a58ad8"], TUL = ["#ff8fb8", "#ffa3c4", "#ff7aa8", "#ffb6c9"], LEAF = ["#8fbf6f", "#b5cf72", "#7fae6a", "#e0c070"];
+const LAV = ["#b79be6", "#c9a8f0", "#a58ad8"], TUL = ["#ff8fb8", "#ffa3c4", "#ff7aa8", "#ffb6c9"], LEAF = ["#b9e0a8", "#cfe8a4", "#a6d49a", "#f3e2a0"];
+const BLOSS = ["#ffc9d9", "#ffb3c9", "#ffd9e5", "#f7a8c4"];
+const RAINBOW = ["#ff8fa3", "#ffb27a", "#ffe27a", "#9fe3a0", "#8fd0ff", "#a99cf5", "#dd9cf0"];
 const SKY_KEYS = [
-    [360, [186, 160, 214], [255, 206, 170]], [720, [150, 190, 235], [255, 236, 200]], [1050, [190, 140, 190], [255, 190, 130]],
-    [1200, [90, 70, 130], [235, 140, 140]], [1320, [30, 30, 70], [80, 60, 120]], [1440, [30, 30, 70], [80, 60, 120]]
+    [360, [214, 196, 240], [255, 224, 206]], [720, [176, 214, 245], [255, 244, 224]], [1050, [232, 190, 220], [255, 214, 170]],
+    [1200, [176, 154, 220], [250, 178, 192]], [1320, [128, 120, 186], [204, 168, 214]], [1440, [128, 120, 186], [204, 168, 214]]
 ];
 const lerp = (a, b, t) => a + (b - a) * t;
 const clamp01 = v => Math.max(0, Math.min(1, v));
 const mixRGB = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 const rgbStr = (c, al = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${al})`;
+const hexRGB = h => { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
+const rgbHex = c => "#" + c.map(v => Math.max(0, Math.min(255, v | 0)).toString(16).padStart(2, "0")).join("");
+const hexMix = (a, b, t) => rgbHex(mixRGB(hexRGB(a), hexRGB(b), t));
 const R = () => Math.random();
  
 function skyAt(t) {
@@ -1025,10 +1583,9 @@ function skyAt(t) {
 }
  
 function tint(hex) {
-    const n = parseInt(hex.slice(1), 16);
-    let r = n >> 16, g = (n >> 8) & 255, b = n & 255;
-    const k = 1 - 0.55 * env.night - 0.14 * env.rain;
-    r = r * k + env.heat * 18 + env.gold * 16; g = g * k + env.heat * 4 + env.gold * 4; b = b * k - env.heat * 20 - env.gold * 14 + env.night * 25;
+    const [r0, g0, b0] = hexRGB(hex);
+    const k = 1 - 0.3 * env.night - 0.12 * env.rain - 0.05 * env.quake;
+    const r = r0 * k + env.heat * 20 + env.gold * 16, g = g0 * k + env.heat * 6 + env.gold * 4, b = b0 * k - env.heat * 24 - env.gold * 14 + env.night * 25;
     const c = v => Math.max(0, Math.min(255, v)) | 0;
     return `rgb(${c(r)},${c(g)},${c(b)})`;
 }
@@ -1042,6 +1599,7 @@ function bgResize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2), W = (bg.W = window.innerWidth), H = (bg.H = window.innerHeight);
     bg.cv.width = W * dpr; bg.cv.height = H * dpr;
     bg.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (!bg.bfImgs) bg.bfImgs = Array.from({ length: 8 }, (_, i) => { const im = new Image(); im.src = `assets/butterfly-${i + 1}.png`; return im; });
     bg.pond = { cx: W * 0.84, cy: H * 0.9, rx: W * 0.14, ry: H * 0.06 };
  
     bg.flowers = [];
@@ -1065,36 +1623,71 @@ function bgResize() {
     });
     bg.trees = [-1, 1].map(side => ({
         x: side < 0 ? W * 0.035 : W * 0.965, base: H * 0.84, side,
-        blobs: Array.from({ length: 34 }, () => ({ dx: (R() - 0.5) * W * 0.2, dy: -(H * 0.36 + R() * H * 0.26), r: 32 + R() * 52, c: LEAF[(R() * 4) | 0], p: R() * 6 }))
+        blobs: Array.from({ length: 34 }, () => ({ dx: (R() - 0.5) * W * 0.2, dy: -(H * 0.36 + R() * H * 0.26), r: 32 + R() * 52, c: (side < 0 ? BLOSS : LEAF)[(R() * 4) | 0], p: R() * 6 }))
     }));
+    // lollipop trees for the cotton candy event
+    bg.pops = [];
+    [-1, 1].forEach(side => { for (let i = 0; i < 5; i++) bg.pops.push({ x: side < 0 ? W * (0.01 + i * 0.045) : W * (0.99 - i * 0.045), base: H * (0.8 + R() * 0.05), r: 34 + R() * 46, stem: H * (0.14 + R() * 0.2), dir: R() < 0.5 ? 1 : -1, c1: ["#ff8fb8", "#ff9ec4", "#f78fc9"][i % 3], c2: ["#9fe3b5", "#b9a8f5", "#ffe08a"][(i + (side < 0 ? 0 : 1)) % 3], p: R() * 6 }); });
+    bg.puffs = Array.from({ length: 9 }, () => ({ x: R() * W, y: H * (0.1 + R() * 0.5), r: 30 + R() * 46, v: 0.15 + R() * 0.3, p: R() * 6 }));
+    bg.sprinkles = Array.from({ length: 90 }, () => ({ x: R() * W, y: R() * H, l: 6 + R() * 6, rot: R() * 3, v: 0.5 + R() * 1.4, c: ["#ff8fb8", "#9fe3b5", "#ffe08a", "#b9a8f5", "#ffffff", "#8fd0ff"][(R() * 6) | 0] }));
+    bg.glit = Array.from({ length: 70 }, () => ({ x: R() * W, y: R() * H, s: 2 + R() * 4, v: 0.3 + R() * 0.9, p: R() * 6, c: RAINBOW[(R() * 7) | 0] }));
+    bg.bf = Array.from({ length: 16 }, (_, i) => ({ i: i % 8, x: R() * W, y: H * (0.12 + R() * 0.7), a: R() * 6.28, spd: 0.7 + R() * 1.1, size: 52 + R() * 44, ph: R() * 6 }));
+    bg.streaks = Array.from({ length: 44 }, () => ({ x: R() * W, y: R() * H * 0.85, l: 80 + R() * 160, v: 14 + R() * 18 }));
+    bg.cracks = Array.from({ length: 7 }, () => {
+        let x = R() * W, y = H * (0.8 + R() * 0.1); const pts = [[x, y]];
+        while (y < H) { x += (R() - 0.5) * 56; y += H * 0.018 + R() * H * 0.03; pts.push([x, y]); }
+        return pts;
+    });
+    bg.rocks = [];
     bg.far = Array.from({ length: 36 }, () => ({ x: R() * W, r: 14 + R() * 26, c: R() < 0.5 ? "#b9aedb" : "#aebfa0" }));
     bg.arches = [{ x: W * 0.27, y: H * 0.7, r: 36 }, { x: W * 0.73, y: H * 0.685, r: 30 }].map(a => ({ ...a, roses: Array.from({ length: 16 }, (_, i) => ({ a: Math.PI + (i / 15) * Math.PI, c: PALETTE[i % 2 ? 0 : 7] })) }));
     bg.bokeh = Array.from({ length: 30 }, () => ({ x: R() * W, y: R() * H, r: 8 + R() * 30, p: R() * 6, c: R() < 0.6 ? [255, 214, 140] : [255, 176, 200] }));
     bg.clouds = Array.from({ length: 7 }, (_, i) => ({ x: (i / 7) * W, y: 30 + R() * H * 0.24, s: 0.7 + R() * 0.9, v: 3 + R() * 7 }));
-    bg.drops = Array.from({ length: 280 }, () => ({ x: R() * W, y: R() * H, v: 11 + R() * 8, l: 10 + R() * 12, gy: H * (0.8 + R() * 0.2) }));
-    bg.petals = Array.from({ length: 70 }, () => ({ x: R() * W, y: R() * H, s: 3 + R() * 4, r: R() * 6, c: PALETTE[(R() * 5) | 0], v: 0.5 + R() }));
+    bg.drops = Array.from({ length: 320 }, () => ({ x: R() * W, y: R() * H, v: 12 + R() * 9, l: 12 + R() * 14, gy: H * (0.8 + R() * 0.2) }));
+    bg.petals = Array.from({ length: 80 }, (_, i) => ({ x: R() * W, y: R() * H, s: 3 + R() * 4, r: R() * 6, c: i % 3 === 0 ? "#9fd08a" : PALETTE[(R() * 5) | 0], leaf: i % 3 === 0, v: 0.5 + R() }));
     bg.pollen = Array.from({ length: 40 }, () => ({ x: R() * W, y: R() * H, p: R() * 6.28 }));
     bg.flies = Array.from({ length: 26 }, () => ({ x: R() * W, y: H * (0.6 + R() * 0.38), p: R() * 6.28 }));
     bg.bflies = Array.from({ length: 6 }, (_, i) => ({ x: R() * W, y: H * (0.5 + R() * 0.3), a: R() * 6.28, c: PALETTE[(i * 2) % 8] }));
     bg.pads = Array.from({ length: 10 }, (_, i) => { const a = R() * 6.28, d = Math.sqrt(R()) * 0.85; return { dx: Math.cos(a) * d, dy: Math.sin(a) * d, r: 7 + R() * 7, lotus: i < 4 }; });
     bg.dust = []; bg.ripples = []; bg.splashes = [];
+    bg.fall = Array.from({ length: 30 }, () => ({ x: R() < 0.5 ? R() * W * 0.24 : W * (0.76 + R() * 0.24), y: R() * H, s: 3 + R() * 3, v: 0.35 + R() * 0.6, r: R() * 6, c: PALETTE[(R() * 2) | 0] }));
+}
+ 
+function star4(ctx, x, y, s) {
+    ctx.beginPath(); ctx.moveTo(x, y - s); ctx.quadraticCurveTo(x, y, x + s, y); ctx.quadraticCurveTo(x, y, x, y + s); ctx.quadraticCurveTo(x, y, x - s, y); ctx.quadraticCurveTo(x, y, x, y - s); ctx.fill();
+}
+ 
+function drawRainbow(ctx, W, H, t, a) {
+    const cx = W * 0.5, cy = H * 0.8, r0 = Math.min(W * 0.52, H * 1.05), bw = Math.max(11, H * 0.024);
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = `rgba(255,236,255,${0.13 * a})`; ctx.lineWidth = bw * 10; ctx.beginPath(); ctx.arc(cx, cy, r0 - bw * 3, Math.PI, 2 * Math.PI); ctx.stroke();
+    ctx.globalCompositeOperation = "source-over";
+    RAINBOW.forEach((c, i) => { ctx.strokeStyle = c; ctx.globalAlpha = a * (0.52 + 0.1 * Math.sin(t * 1.2 + i)); ctx.lineWidth = bw; ctx.beginPath(); ctx.arc(cx, cy, r0 - i * bw, Math.PI, 2 * Math.PI); ctx.stroke(); });
+    ctx.globalAlpha = 1; ctx.fillStyle = "#fff";
+    for (let k = 0; k < 28; k++) {
+        const ang = Math.PI + ((k / 28 + t * 0.03) % 1) * Math.PI, tw = Math.abs(Math.sin(t * 3 + k * 1.7)), rr = r0 - bw * (1 + (k % 6));
+        ctx.globalAlpha = a * tw; star4(ctx, cx + Math.cos(ang) * rr, cy + Math.sin(ang) * rr, 4 + tw * 5);
+    }
+    ctx.restore();
 }
  
 function drawFlower(ctx, f, t, sway) {
-    const ang = Math.sin(t * (1.1 + env.wind) + f.phase + f.x * 0.01) * sway + env.wind * 0.12;
-    const hx = f.x + ang * f.h, hy = f.y - f.h;
+    const ang = Math.sin(t * (1.1 + env.wind * 1.8) + f.phase + f.x * 0.01) * sway + env.wind * 0.18;
+    const dr = env.heat * 0.32 + env.rain * 0.08, dir = f.phase > 3.14 ? 1 : -1; // wilt in the heat, droop in the rain
+    const lean = ang + dr * dir, hx = f.x + lean * f.h, hy = f.y - f.h * (1 - dr * 0.35);
     ctx.strokeStyle = tint("#4fa96a"); ctx.lineWidth = 2 * f.scale + 0.5;
-    ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.quadraticCurveTo(f.x + ang * f.h * 0.2, f.y - f.h * 0.55, hx, hy); ctx.stroke();
-    ctx.fillStyle = tint("#6cc28a"); ctx.beginPath(); ctx.ellipse(f.x + ang * f.h * 0.15, f.y - f.h * 0.35, 6 * f.scale, 2.6 * f.scale, -0.6, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.quadraticCurveTo(f.x + lean * f.h * 0.2, f.y - f.h * 0.55, hx, hy); ctx.stroke();
+    ctx.fillStyle = tint("#6cc28a"); ctx.beginPath(); ctx.ellipse(f.x + lean * f.h * 0.15, f.y - f.h * 0.35, 6 * f.scale, 2.6 * f.scale, -0.6, 0, 7); ctx.fill();
     ctx.fillStyle = tint(f.color);
     if (f.type === "lav") {
-        for (let k = 0; k < 6; k++) { ctx.beginPath(); ctx.ellipse(hx - ang * k * 2, hy + k * f.head * 1.3, f.head * 0.7, f.head * 1.1, ang, 0, 7); ctx.fill(); }
+        for (let k = 0; k < 6; k++) { ctx.beginPath(); ctx.ellipse(hx - lean * k * 2, hy + k * f.head * 1.3, f.head * 0.7, f.head * 1.1, lean, 0, 7); ctx.fill(); }
     } else if (f.type === "tulip") {
-        ctx.beginPath(); ctx.ellipse(hx, hy, f.head * 0.85, f.head * 1.2, ang, 0, 7); ctx.fill();
-        ctx.fillStyle = tint("#ffd6e4"); ctx.beginPath(); ctx.ellipse(hx - f.head * 0.25, hy - f.head * 0.2, f.head * 0.3, f.head * 0.7, ang, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(hx, hy, f.head * 0.85, f.head * 1.2, lean, 0, 7); ctx.fill();
+        ctx.fillStyle = tint("#ffd6e4"); ctx.beginPath(); ctx.ellipse(hx - f.head * 0.25, hy - f.head * 0.2, f.head * 0.3, f.head * 0.7, lean, 0, 7); ctx.fill();
     } else {
         for (let p = 0; p < f.petals; p++) {
-            const a = (p / f.petals) * 6.283 + ang * 2;
+            const a = (p / f.petals) * 6.283 + lean * 2;
             ctx.beginPath(); ctx.ellipse(hx + Math.cos(a) * f.head * 0.8, hy + Math.sin(a) * f.head * 0.8, f.head * 0.7, f.head * 0.42, a, 0, 7); ctx.fill();
         }
         ctx.fillStyle = tint(f.type === "sun" ? "#6b4226" : "#ffd84d"); ctx.beginPath(); ctx.arc(hx, hy, f.head * (f.type === "sun" ? 0.62 : 0.42), 0, 7); ctx.fill();
@@ -1106,21 +1699,30 @@ function bgFrame(ms) {
     requestAnimationFrame(bgFrame);
     if (document.hidden) return;
  
-    const fx = currentWeather.effect;
+    const fx = currentWeather.effect, ev = currentEvent;
     const target = {
-        rain: fx === "auto_water" ? 1 : 0, wind: fx === "speed_boost" ? 1 : 0, heat: fx === "dry_fast" ? 1 : 0,
-        quake: fx === "soil_damage" ? 1 : 0, night: clamp01((timeMinutes - 1140) / 150),
-        cloud: fx === "auto_water" ? 1 : fx === "speed_boost" ? 0.4 : fx === "soil_damage" ? 0.35 : fx === "dry_fast" ? 0 : 0.25
+        rain: fx === "auto_water" ? 1 : 0, wind: fx === "speed_boost" ? 1 : 0, heat: fx === "dry_fast" ? 1 : 0, quake: fx === "soil_damage" ? 1 : 0,
+        night: clamp01((timeMinutes - 1140) / 150),
+        cloud: fx === "auto_water" ? 1 : fx === "speed_boost" ? 0.55 : fx === "soil_damage" ? 0.4 : fx === "dry_fast" ? 0 : ev === "candy" ? 0.85 : ev === "rainbow" ? 0.5 : 0.25,
+        evButterfly: ev === "butterfly" ? 1 : 0, evRainbow: ev === "rainbow" ? 1 : 0, evCandy: ev === "candy" ? 1 : 0
     };
     for (const k in target) env[k] += (target[k] - env[k]) * 0.02;
     env.gold = clamp01(1 - Math.abs(timeMinutes - 1020) / 220) * (1 - env.rain);
     const light = (1 - env.night) * (1 - env.rain * 0.7);
  
+    // Sky: every weather and event paints it its own colour
     const sk = skyAt(timeMinutes);
-    let top = mixRGB(sk.top, [150, 160, 180], env.rain * 0.8), bot = mixRGB(sk.bot, [205, 212, 224], env.rain * 0.75);
-    top = mixRGB(top, [255, 200, 120], env.heat * 0.6); bot = mixRGB(bot, [255, 240, 200], env.heat * 0.6);
+    let top = sk.top, bot = sk.bot;
+    const mixTo = (a, b, k) => { top = mixRGB(top, a, k); bot = mixRGB(bot, b, k); };
+    mixTo([96, 112, 142], [160, 176, 200], env.rain * 0.92);
+    mixTo([150, 205, 240], [225, 245, 255], env.wind * 0.45 * (1 - env.night));
+    mixTo([255, 186, 104], [255, 236, 172], env.heat * 0.82);
+    mixTo([176, 150, 140], [224, 200, 186], env.quake * 0.62);
+    mixTo([255, 168, 204], [255, 214, 232], env.evCandy * 0.86);
+    mixTo([170, 200, 255], [255, 232, 205], env.evRainbow * 0.45);
+    mixTo([168, 214, 248], [255, 246, 220], env.evButterfly * 0.4);
  
-    const shake = env.quake * (Math.sin(t * 2.3) > 0.2 ? 1 : 0.25) * 5;
+    const shake = env.quake * (Math.sin(t * 2.3) > 0 ? 1 : 0.3) * 7;
     ctx.save();
     ctx.translate((R() - 0.5) * shake, (R() - 0.5) * shake);
  
@@ -1131,7 +1733,7 @@ function bgFrame(ms) {
     // Stars + moon
     if (env.night > 0.05) {
         ctx.fillStyle = "#fff";
-        for (let i = 0; i < 60; i++) { ctx.globalAlpha = env.night * (0.4 + 0.6 * Math.abs(Math.sin(t + i))); ctx.fillRect((i * 197.3) % W, (i * 83.7) % (H * 0.5), 2, 2); }
+        for (let i = 0; i < 60; i++) { ctx.globalAlpha = env.night * (0.4 + 0.6 * Math.abs(Math.sin(t + i))) * (1 - env.rain); ctx.fillRect((i * 197.3) % W, (i * 83.7) % (H * 0.5), 2, 2); }
         ctx.globalAlpha = 1;
         const mp = clamp01((timeMinutes - 1140) / 300), mx = W * (0.2 + 0.6 * mp), my = H * 0.3 - Math.sin(Math.PI * mp) * H * 0.18;
         const mg = ctx.createRadialGradient(mx, my, 4, mx, my, 80);
@@ -1140,15 +1742,15 @@ function bgFrame(ms) {
         ctx.fillStyle = `rgba(255,250,228,${env.night})`; ctx.beginPath(); ctx.arc(mx, my, 20, 0, 7); ctx.fill();
     }
  
-    // Sun, glow and soft light rays
+    // Sun, glow, light rays (bigger and whiter in a heatwave)
     const sp = clamp01((timeMinutes - 360) / 810), sx = W * (0.12 + 0.76 * sp), sy = H * 0.46 - Math.sin(Math.PI * sp) * H * 0.28;
-    const sunA = (1 - env.rain * 0.9) * (1 - env.night);
+    const sunA = (1 - env.rain * 0.92) * (1 - env.night);
     if (sunA > 0.02) {
-        const rad = 120 + env.heat * 70 + env.gold * 60 + Math.sin(t * 1.5) * 4, warm = env.heat > 0.3 ? "255,170,80" : env.gold > 0.3 ? "255,196,120" : "255,236,170";
+        const rad = 120 + env.heat * 120 + env.gold * 60 + Math.sin(t * 1.5) * 4, warm = env.heat > 0.3 ? "255,170,80" : env.gold > 0.3 ? "255,196,120" : "255,236,170";
         const g = ctx.createRadialGradient(sx, sy, 6, sx, sy, rad);
         g.addColorStop(0, `rgba(${warm},${sunA})`); g.addColorStop(1, `rgba(${warm},0)`);
         ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, rad, 0, 7); ctx.fill();
-        ctx.fillStyle = `rgba(255,${env.heat > 0.3 ? 200 : 246},150,${sunA})`; ctx.beginPath(); ctx.arc(sx, sy, 28 + env.heat * 8, 0, 7); ctx.fill();
+        ctx.fillStyle = `rgba(255,${env.heat > 0.3 ? 214 : 246},150,${sunA})`; ctx.beginPath(); ctx.arc(sx, sy, 28 + env.heat * 18, 0, 7); ctx.fill();
         ctx.globalCompositeOperation = "lighter";
         for (let k = 0; k < 7; k++) {
             const a = 0.5 + k * 0.28 + Math.sin(t * 0.15 + k) * 0.04, L = Math.max(W, H) * 1.3;
@@ -1160,64 +1762,113 @@ function bgFrame(ms) {
         ctx.globalCompositeOperation = "source-over";
     }
  
-    // Clouds lit pink and gold by the sun
-    const cc = mixRGB(mixRGB([255, 255, 255], [255, 218, 205], 0.5 + env.gold * 0.5), [125, 135, 150], env.rain);
+    // Rainbow event: a glowing rainbow over the garden
+    if (env.evRainbow > 0.03) drawRainbow(ctx, W, H, t, env.evRainbow * (1 - env.night * 0.6));
+ 
+    // Clouds: lit pink by the sun, grey in a storm, racing in the wind, cotton candy in candy land
+    const cc = mixRGB(mixRGB(mixRGB([255, 255, 255], [255, 218, 205], 0.5 + env.gold * 0.5), [255, 196, 224], env.evCandy), [112, 122, 140], env.rain);
     const cAlpha = (0.4 + env.cloud * 0.5) * (1 - env.night * 0.6);
     bg.clouds.forEach(c => {
-        c.x += (c.v + env.wind * 40) * 0.016; if (c.x > W + 160) c.x = -160;
+        c.x += (c.v + env.wind * 130) * 0.016; if (c.x > W + 200) c.x = -200;
+        const s = c.s * (1 + env.evCandy * 0.45);
         ctx.fillStyle = rgbStr(mixRGB(cc, [70, 60, 110], env.night * 0.5), cAlpha);
-        [[0, 0, 34], [32, -10, 40], [70, 0, 32], [35, 10, 36]].forEach(([dx, dy, r]) => { ctx.beginPath(); ctx.arc(c.x + dx * c.s, c.y + dy * c.s, r * c.s, 0, 7); ctx.fill(); });
+        [[0, 0, 34], [32, -10, 40], [70, 0, 32], [35, 10, 36], [-12, 8, 26], [92, 8, 24]].forEach(([dx, dy, r]) => { ctx.beginPath(); ctx.arc(c.x + dx * s, c.y + dy * s, r * s, 0, 7); ctx.fill(); });
+        if (env.evCandy > 0.1) { ctx.fillStyle = `rgba(190,226,255,${0.45 * env.evCandy})`; ctx.beginPath(); ctx.arc(c.x + 52 * s, c.y + 14 * s, 26 * s, 0, 7); ctx.fill(); }
     });
+    if (env.rain > 0.2) { ctx.fillStyle = `rgba(80,92,118,${0.22 * env.rain})`; ctx.fillRect(-12, -12, W + 24, H * 0.5); }
  
-    // Dreamy distant hills, tiny far trees and mist
-    ctx.fillStyle = tint("#cdbbe6"); ctx.beginPath(); ctx.moveTo(0, H);
+    // Hills, far trees, mist
+    const hl = k => tint(hexMix(k[0], k[1], env.evCandy));
+    ctx.fillStyle = hl(["#cdbbe6", "#ffc4dc"]); ctx.beginPath(); ctx.moveTo(0, H);
     for (let x = 0; x <= W; x += 24) ctx.lineTo(x, H * 0.58 + Math.sin(x * 0.0035 + 1) * H * 0.045);
     ctx.lineTo(W, H); ctx.fill();
-    bg.far.forEach(f => { ctx.fillStyle = tint(f.c); ctx.beginPath(); ctx.arc(f.x, hillY(f.x) - f.r * 0.5 + 8, f.r, 0, 7); ctx.fill(); });
-    ctx.fillStyle = tint("#b9cba8"); ctx.beginPath(); ctx.moveTo(0, H);
+    bg.far.forEach(f => { ctx.fillStyle = hl([f.c, "#ffb3d2"]); ctx.beginPath(); ctx.arc(f.x, hillY(f.x) - f.r * 0.5 + 8, f.r, 0, 7); ctx.fill(); });
+    ctx.fillStyle = hl(["#b9cba8", "#ffd0e4"]); ctx.beginPath(); ctx.moveTo(0, H);
     for (let x = 0; x <= W; x += 24) ctx.lineTo(x, hillY(x) + 14);
     ctx.lineTo(W, H); ctx.fill();
     const mist = ctx.createLinearGradient(0, H * 0.52, 0, H * 0.74);
-    mist.addColorStop(0, "rgba(255,226,214,0)"); mist.addColorStop(0.55, `rgba(255,226,214,${0.38 * light})`); mist.addColorStop(1, "rgba(255,226,214,0)");
+    mist.addColorStop(0, "rgba(255,226,214,0)"); mist.addColorStop(0.55, `rgba(${env.rain > 0.4 ? "200,210,225" : "255,226,214"},${(0.38 + env.rain * 0.3) * (light + 0.15)})`); mist.addColorStop(1, "rgba(255,226,214,0)");
     ctx.fillStyle = mist; ctx.fillRect(-12, H * 0.52, W + 24, H * 0.22);
  
-    // Side trees (canopies sway softly, light dapples through)
-    bg.trees.forEach(tr => {
-        ctx.fillStyle = tint("#7a5a4a"); ctx.beginPath();
-        ctx.moveTo(tr.x - 26, tr.base); ctx.quadraticCurveTo(tr.x - 12, tr.base - H * 0.2, tr.x + tr.side * 20, tr.base - H * 0.42);
-        ctx.lineTo(tr.x + tr.side * 20 + 20, tr.base - H * 0.42); ctx.quadraticCurveTo(tr.x + 26, tr.base - H * 0.2, tr.x + 26, tr.base); ctx.fill();
-        tr.blobs.forEach(b => {
-            const ox = Math.sin(t * 0.5 + b.p) * 4;
-            ctx.fillStyle = tint(b.c); ctx.beginPath(); ctx.arc(tr.x + b.dx + ox, tr.base + b.dy, b.r, 0, 7); ctx.fill();
+    // Blossom trees (fade out in candy land)
+    const treeA = 1 - env.evCandy * 0.95;
+    if (treeA > 0.02) {
+        ctx.globalAlpha = treeA;
+        bg.trees.forEach(tr => {
+            ctx.fillStyle = tint("#b78f7e"); ctx.beginPath();
+            ctx.moveTo(tr.x - 26, tr.base); ctx.quadraticCurveTo(tr.x - 12, tr.base - H * 0.2, tr.x + tr.side * 20, tr.base - H * 0.42);
+            ctx.lineTo(tr.x + tr.side * 20 + 20, tr.base - H * 0.42); ctx.quadraticCurveTo(tr.x + 26, tr.base - H * 0.2, tr.x + 26, tr.base); ctx.fill();
+            const swayAmt = 4 + env.wind * 12 + env.quake * 5;
+            tr.blobs.forEach(b => {
+                const ox = Math.sin(t * (0.5 + env.wind * 1.5) + b.p) * swayAmt;
+                ctx.fillStyle = tint(b.c); ctx.beginPath(); ctx.arc(tr.x + b.dx + ox, tr.base + b.dy, b.r, 0, 7); ctx.fill();
+            });
+            ctx.globalCompositeOperation = "lighter";
+            tr.blobs.forEach((b, i) => { if (i % 3) return; ctx.fillStyle = `rgba(255,214,140,${0.13 * light * (0.6 + 0.4 * Math.sin(t * 1.3 + b.p))})`; ctx.beginPath(); ctx.arc(tr.x + b.dx - b.r * 0.2, tr.base + b.dy - b.r * 0.25, b.r * 0.45, 0, 7); ctx.fill(); });
+            ctx.globalCompositeOperation = "source-over";
         });
-        ctx.globalCompositeOperation = "lighter";
-        tr.blobs.forEach((b, i) => { if (i % 3) return; ctx.fillStyle = `rgba(255,214,140,${0.13 * light * (0.6 + 0.4 * Math.sin(t * 1.3 + b.p))})`; ctx.beginPath(); ctx.arc(tr.x + b.dx - b.r * 0.2, tr.base + b.dy - b.r * 0.25, b.r * 0.45, 0, 7); ctx.fill(); });
-        ctx.globalCompositeOperation = "source-over";
-    });
+        ctx.globalAlpha = 1;
+    }
+    // Cotton candy event: swirly lollipop trees and floating cotton candy puffs
+    if (env.evCandy > 0.03) {
+        bg.pops.forEach(p => {
+            ctx.globalAlpha = env.evCandy;
+            const ox = Math.sin(t * 0.8 + p.p) * 3, hx = p.x + ox, hy = p.base - p.stem;
+            ctx.lineCap = "round"; ctx.lineWidth = p.r * 0.17; ctx.strokeStyle = "#fff"; ctx.beginPath(); ctx.moveTo(p.x, p.base); ctx.lineTo(hx, hy); ctx.stroke();
+            ctx.strokeStyle = "#ff7fae"; ctx.setLineDash([9, 13]); ctx.beginPath(); ctx.moveTo(p.x, p.base); ctx.lineTo(hx, hy); ctx.stroke(); ctx.setLineDash([]);
+            const rot = t * 0.18 * p.dir;
+            for (let i = 0; i < 12; i++) {
+                ctx.fillStyle = [p.c1, "#fff7fb", p.c2][i % 3];
+                ctx.beginPath(); ctx.moveTo(hx, hy); ctx.arc(hx, hy, p.r, rot + (i * Math.PI) / 6, rot + ((i + 1) * Math.PI) / 6); ctx.fill();
+            }
+            ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(hx, hy, p.r, 0, 7); ctx.stroke();
+            ctx.fillStyle = "rgba(255,255,255,0.45)"; ctx.beginPath(); ctx.ellipse(hx - p.r * 0.35, hy - p.r * 0.4, p.r * 0.3, p.r * 0.16, -0.7, 0, 7); ctx.fill();
+        });
+        bg.puffs.forEach(p => {
+            p.y += Math.sin(t * 0.6 + p.p) * 0.25 - p.v * 0.2; p.x += p.v; if (p.x > W + 80) p.x = -80; if (p.y < H * 0.05) p.y = H * 0.55;
+            ctx.globalAlpha = env.evCandy * 0.8;
+            [["#ffc2dc", 0, 0, 1], ["#ffd9ea", 0.7, -0.2, 0.8], ["#bfe4ff", -0.7, 0.1, 0.75], ["#fff", 0.1, -0.5, 0.6]].forEach(([c, dx, dy, k]) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(p.x + dx * p.r, p.y + dy * p.r, p.r * 0.6 * k, 0, 7); ctx.fill(); });
+        });
+        ctx.globalAlpha = 1;
+    }
  
-    // Meadow, rose arches
+    // Blossom petals drifting from the trees
+    ctx.globalAlpha = 1 - env.evCandy;
+    bg.fall.forEach(q => {
+        q.y += q.v; q.x += Math.sin(t * 0.8 + q.r) * 0.6 + env.wind * 4; q.r += 0.03;
+        if (q.y > H * 0.96) { q.y = H * 0.1; q.x = R() < 0.5 ? R() * W * 0.24 : W * (0.76 + R() * 0.24); }
+        ctx.fillStyle = tint(q.c); ctx.beginPath(); ctx.ellipse(q.x, q.y, q.s, q.s * 0.55, q.r, 0, 7); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+ 
+    // Meadow
     const gnd = ctx.createLinearGradient(0, H * 0.72, 0, H);
-    gnd.addColorStop(0, tint("#a6d896")); gnd.addColorStop(1, tint("#6fbf7c"));
+    gnd.addColorStop(0, tint(hexMix("#bbe8aa", "#ffd2e6", env.evCandy))); gnd.addColorStop(1, tint(hexMix("#92d79c", "#ffb3d6", env.evCandy)));
     ctx.fillStyle = gnd; ctx.fillRect(-12, H * 0.74, W + 24, H);
     bg.arches.forEach(a => {
         ctx.strokeStyle = tint("#8a6a58"); ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(a.x, a.y, a.r, Math.PI, 0); ctx.moveTo(a.x - a.r, a.y); ctx.lineTo(a.x - a.r, a.y + 28); ctx.moveTo(a.x + a.r, a.y); ctx.lineTo(a.x + a.r, a.y + 28); ctx.stroke();
         a.roses.forEach(r => { ctx.fillStyle = tint(r.c); ctx.beginPath(); ctx.arc(a.x + Math.cos(r.a) * a.r, a.y + Math.sin(r.a) * a.r, 4.5, 0, 7); ctx.fill(); });
     });
  
-    // Cobblestone path
-    ctx.fillStyle = tint("#e6d3b4"); ctx.beginPath();
+    // Cobblestone path (marshmallow pink in candy land)
+    ctx.fillStyle = tint(hexMix("#e6d3b4", "#fff0f6", env.evCandy)); ctx.beginPath();
     for (let y = H * 0.62; y <= H; y += 8) ctx.lineTo(pathCx(y) - pathHW(y), y);
     for (let y = H; y >= H * 0.62; y -= 8) ctx.lineTo(pathCx(y) + pathHW(y), y);
     ctx.fill();
-    bg.stones.forEach(s => { ctx.fillStyle = tint(`#${((s.shade | 0) << 16 | (s.shade * 0.9 | 0) << 8 | (s.shade * 0.78 | 0)).toString(16).padStart(6, "0")}`); ctx.beginPath(); ctx.ellipse(s.x, s.y, s.w, s.w * 0.5, 0, 0, 7); ctx.fill(); });
+    bg.stones.forEach(s => { ctx.fillStyle = tint(hexMix(rgbHex([s.shade, s.shade * 0.9, s.shade * 0.78]), "#ffd6e8", env.evCandy)); ctx.beginPath(); ctx.ellipse(s.x, s.y, s.w, s.w * 0.5, 0, 0, 7); ctx.fill(); });
  
-    // Pond with lily pads, lotus and sparkles
+    // Pond: lily pads, lotus, sparkles, a rainbow shimmer during the rainbow event
     const p = bg.pond;
     const wg = ctx.createLinearGradient(0, p.cy - p.ry, 0, p.cy + p.ry);
     wg.addColorStop(0, rgbStr(mixRGB(bot, [200, 190, 240], 0.5))); wg.addColorStop(1, rgbStr(mixRGB(top, [90, 170, 190], 0.6)));
     ctx.fillStyle = wg; ctx.beginPath(); ctx.ellipse(p.cx, p.cy, p.rx, p.ry, 0, 0, 7); ctx.fill();
-    ctx.strokeStyle = tint("#e7dcc4"); ctx.lineWidth = 4; ctx.stroke();
-    if (R() < 0.02) bg.ripples.push({ x: p.cx + (R() - 0.5) * p.rx * 1.4, y: p.cy + (R() - 0.5) * p.ry, r: 1 });
+    if (env.evRainbow > 0.05) {
+        ctx.save(); ctx.beginPath(); ctx.ellipse(p.cx, p.cy, p.rx, p.ry, 0, 0, 7); ctx.clip();
+        RAINBOW.forEach((c, i) => { ctx.fillStyle = c; ctx.globalAlpha = 0.4 * env.evRainbow; ctx.fillRect(p.cx - p.rx, p.cy - p.ry + (i * 2 * p.ry) / 7 + Math.sin(t * 1.5 + i) * 3, p.rx * 2, (2 * p.ry) / 7); });
+        ctx.restore();
+    }
+    ctx.strokeStyle = tint("#e7dcc4"); ctx.lineWidth = 4; ctx.beginPath(); ctx.ellipse(p.cx, p.cy, p.rx, p.ry, 0, 0, 7); ctx.stroke();
+    if (R() < 0.02 + env.rain * 0.25) bg.ripples.push({ x: p.cx + (R() - 0.5) * p.rx * 1.4, y: p.cy + (R() - 0.5) * p.ry, r: 1 });
     for (let i = bg.ripples.length - 1; i >= 0; i--) { const r = bg.ripples[i]; r.r += 0.35; ctx.strokeStyle = `rgba(255,255,255,${Math.max(0, 0.5 - r.r / 40)})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(r.x, r.y, r.r * 1.8, r.r * 0.7, 0, 0, 7); ctx.stroke(); if (r.r > 22) bg.ripples.splice(i, 1); }
     bg.pads.forEach((d, i) => {
         const x = p.cx + d.dx * p.rx * 0.9, y = p.cy + d.dy * p.ry * 0.8 + Math.sin(t + i) * 1;
@@ -1227,12 +1878,15 @@ function bgFrame(ms) {
     ctx.fillStyle = `rgba(255,255,255,${0.7 * light})`;
     for (let i = 0; i < 14; i++) { const a = Math.sin(t * 2 + i * 1.7); if (a > 0.6) ctx.fillRect(p.cx + Math.cos(i * 2.4) * p.rx * 0.8, p.cy + Math.sin(i * 3.1) * p.ry * 0.7, 2.5, 2.5); }
  
-    // Flower field
-    const sway = 0.07 + env.wind * 0.3 + env.rain * 0.06;
+    // Candy land: pink sugar glaze over the ground
+    if (env.evCandy > 0.03) { ctx.fillStyle = `rgba(255,170,212,${0.28 * env.evCandy})`; ctx.fillRect(-12, H * 0.6, W + 24, H); }
+ 
+    // Flower field (sway in wind, droop in rain, wilt in heat)
+    const sway = 0.07 + env.wind * 0.34 + env.rain * 0.05;
     for (const f of bg.flowers) drawFlower(ctx, f, t, sway);
  
-    // Butterflies
-    const bA = (1 - env.rain) * (1 - env.night) * (1 - env.wind * 0.6);
+    // Little meadow butterflies (sunny days)
+    const bA = (1 - env.rain) * (1 - env.night) * (1 - env.wind * 0.6) * (1 - env.evButterfly);
     if (bA > 0.05) bg.bflies.forEach(b => {
         b.a += (R() - 0.5) * 0.12; b.x += Math.cos(b.a) * 0.9; b.y += Math.sin(b.a) * 0.6 + Math.sin(t * 3 + b.x) * 0.3;
         if (b.x < -20) b.x = W + 20; if (b.x > W + 20) b.x = -20;
@@ -1243,11 +1897,23 @@ function bgFrame(ms) {
         ctx.fillStyle = "#6b5560"; ctx.fillRect(b.x - 0.8, b.y - 5, 1.6, 10); ctx.globalAlpha = 1;
     });
  
-    // Dreamy bokeh + pollen
+    // Butterfly event: big watercolour butterflies flutter across the whole screen
+    if (env.evButterfly > 0.03) bg.bf.forEach(b => {
+        b.a += (R() - 0.5) * 0.09 + Math.sin(t * 0.4 + b.ph) * 0.012; b.x += Math.cos(b.a) * b.spd; b.y += Math.sin(b.a) * b.spd * 0.7 + Math.sin(t * 2 + b.ph) * 0.35;
+        if (b.x < -90) b.x = W + 90; if (b.x > W + 90) b.x = -90;
+        if (b.y < H * 0.08) { b.y = H * 0.08; b.a = -b.a; } if (b.y > H * 0.9) { b.y = H * 0.9; b.a = -b.a; }
+        const img = bg.bfImgs[b.i], flap = 0.38 + 0.62 * Math.abs(Math.sin(t * 9 + b.ph));
+        ctx.save(); ctx.globalAlpha = env.evButterfly; ctx.translate(b.x, b.y); ctx.rotate(b.a + Math.PI / 2); ctx.scale(flap, 1);
+        if (img && img.complete && img.naturalWidth) { const h = (b.size * img.naturalHeight) / img.naturalWidth; ctx.drawImage(img, -b.size / 2, -h / 2, b.size, h); }
+        else { ctx.fillStyle = PALETTE[b.i]; ctx.beginPath(); ctx.ellipse(-b.size * 0.22, 0, b.size * 0.25, b.size * 0.36, -0.4, 0, 7); ctx.ellipse(b.size * 0.22, 0, b.size * 0.25, b.size * 0.36, 0.4, 0, 7); ctx.fill(); }
+        ctx.restore();
+    });
+ 
+    // Bokeh + pollen
     ctx.globalCompositeOperation = "lighter";
     bg.bokeh.forEach(b => {
         b.y -= 0.12; b.x += Math.sin(t * 0.3 + b.p) * 0.2; if (b.y < -40) b.y = H + 40;
-        const a = (0.1 + 0.08 * Math.sin(t * 0.8 + b.p)) * (0.35 + light * 0.65);
+        const a = (0.1 + 0.08 * Math.sin(t * 0.8 + b.p)) * (0.35 + light * 0.65) * (1 - env.rain * 0.7);
         const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
         g.addColorStop(0, rgbStr(b.c, a)); g.addColorStop(0.75, rgbStr(b.c, a * 0.7)); g.addColorStop(1, rgbStr(b.c, 0));
         ctx.fillStyle = g; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill();
@@ -1256,33 +1922,52 @@ function bgFrame(ms) {
     ctx.fillStyle = `rgba(255,248,200,${0.75 * (1 - env.rain) * (1 - env.night)})`;
     bg.pollen.forEach(q => { q.y -= 0.25; q.x += Math.sin(t + q.p) * 0.4 + env.wind * 3; if (q.y < 0) q.y = H; if (q.x > W) q.x = 0; ctx.beginPath(); ctx.arc(q.x, q.y, 1.8, 0, 7); ctx.fill(); });
  
+    // Rainbow event: falling rainbow glitter
+    if (env.evRainbow > 0.03) bg.glit.forEach(g => {
+        g.y += g.v; g.x += Math.sin(t + g.p) * 0.5; if (g.y > H) { g.y = -10; g.x = R() * W; }
+        ctx.fillStyle = g.c; ctx.globalAlpha = env.evRainbow * (0.4 + 0.6 * Math.abs(Math.sin(t * 3 + g.p))); star4(ctx, g.x, g.y, g.s + 1.5);
+        ctx.globalAlpha = 1;
+    });
+    // Candy event: colourful sprinkles rain down
+    if (env.evCandy > 0.03) bg.sprinkles.forEach(s => {
+        s.y += s.v; s.rot += 0.02; if (s.y > H) { s.y = -10; s.x = R() * W; }
+        ctx.save(); ctx.globalAlpha = env.evCandy; ctx.translate(s.x, s.y); ctx.rotate(s.rot); ctx.fillStyle = s.c; ctx.fillRect(-s.l / 2, -1.6, s.l, 3.2); ctx.restore();
+    });
+ 
     // Fireflies
     if (env.night > 0.1) bg.flies.forEach(f => {
         f.x += Math.sin(t * 0.7 + f.p) * 0.5; f.y += Math.cos(t * 0.9 + f.p) * 0.4;
-        const a = env.night * (0.4 + 0.6 * Math.abs(Math.sin(t * 2 + f.p)));
+        const a = env.night * (0.4 + 0.6 * Math.abs(Math.sin(t * 2 + f.p))) * (1 - env.rain);
         const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, 9);
         g.addColorStop(0, `rgba(255,255,160,${a})`); g.addColorStop(1, "rgba(255,255,160,0)");
         ctx.fillStyle = g; ctx.beginPath(); ctx.arc(f.x, f.y, 9, 0, 7); ctx.fill();
     });
  
-    // Wind: blowing petals
-    const nP = Math.floor(env.wind * 70);
-    for (let i = 0; i < nP; i++) {
-        const q = bg.petals[i];
-        q.x += (6 + q.v * 6) * env.wind; q.y += Math.sin(t * 2 + i) * 1.4 + 0.3; q.r += 0.1;
-        if (q.x > W + 20) { q.x = -20; q.y = R() * H * 0.9; }
-        ctx.fillStyle = tint(q.c); ctx.beginPath(); ctx.ellipse(q.x, q.y, q.s, q.s * 0.5, q.r, 0, 7); ctx.fill();
+    // WINDY: long gust streaks plus leaves and petals streaming past
+    if (env.wind > 0.03) {
+        ctx.strokeStyle = `rgba(255,255,255,${0.4 * env.wind})`; ctx.lineWidth = 2; ctx.lineCap = "round";
+        bg.streaks.forEach(s => {
+            s.x += s.v * env.wind; if (s.x > W + 40) { s.x = -s.l; s.y = R() * H * 0.85; }
+            ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.quadraticCurveTo(s.x + s.l * 0.5, s.y - 10 + Math.sin(t * 3 + s.y) * 6, s.x + s.l, s.y); ctx.stroke();
+        });
+        const nP = Math.floor(env.wind * bg.petals.length);
+        for (let i = 0; i < nP; i++) {
+            const q = bg.petals[i];
+            q.x += (7 + q.v * 8) * env.wind; q.y += Math.sin(t * 2.4 + i) * 1.8 + 0.3; q.r += 0.14;
+            if (q.x > W + 20) { q.x = -20; q.y = R() * H * 0.9; }
+            ctx.fillStyle = tint(q.c); ctx.beginPath(); ctx.ellipse(q.x, q.y, q.leaf ? q.s * 1.5 : q.s, q.s * 0.5, q.r, 0, 7); ctx.fill();
+        }
     }
  
-    // Rain
+    // RAIN: heavy streaks, splashes, thunder flashes and lightning bolts
     if (env.rain > 0.03) {
-        ctx.strokeStyle = `rgba(200,225,255,${0.75 * env.rain})`; ctx.lineWidth = 1.4; ctx.lineCap = "round";
+        ctx.strokeStyle = `rgba(205,228,255,${0.8 * env.rain})`; ctx.lineWidth = 1.5; ctx.lineCap = "round";
         const n = Math.floor(env.rain * bg.drops.length);
         ctx.beginPath();
         for (let i = 0; i < n; i++) {
-            const d = bg.drops[i]; d.y += d.v; d.x -= 2;
-            ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + 2, d.y - d.l);
-            if (d.y > d.gy) { if (bg.splashes.length < 90) bg.splashes.push({ x: d.x, y: d.gy, r: 1 }); d.y = -10; d.x = R() * (W + 80); }
+            const d = bg.drops[i]; d.y += d.v; d.x -= 2.5;
+            ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + 2.5, d.y - d.l);
+            if (d.y > d.gy) { if (bg.splashes.length < 110) bg.splashes.push({ x: d.x, y: d.gy, r: 1 }); d.y = -10; d.x = R() * (W + 80); }
         }
         ctx.stroke();
         for (let i = bg.splashes.length - 1; i >= 0; i--) {
@@ -1291,22 +1976,51 @@ function bgFrame(ms) {
             if (s.r > 9) bg.splashes.splice(i, 1);
         }
         ctx.fillStyle = `rgba(70,95,130,${env.rain * 0.16})`; ctx.fillRect(-12, -12, W + 24, H + 24);
+        if (env.rain > 0.7 && bg.lt.life <= 0 && R() < 0.003) {
+            const pts = []; let lx = W * (0.15 + R() * 0.7), ly = 0;
+            while (ly < H * 0.7) { pts.push([lx, ly]); lx += (R() - 0.5) * 70; ly += H * 0.04 + R() * H * 0.05; }
+            bg.lt = { life: 16, pts };
+        }
+        if (bg.lt.life > 0) {
+            const f = bg.lt.life / 16;
+            ctx.fillStyle = `rgba(255,255,255,${0.5 * f})`; ctx.fillRect(-12, -12, W + 24, H + 24);
+            if (bg.lt.life > 7) { ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.lineWidth = 3; ctx.shadowColor = "#cfe0ff"; ctx.shadowBlur = 18; ctx.beginPath(); bg.lt.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke(); ctx.shadowBlur = 0; }
+            bg.lt.life--;
+        }
     }
  
-    // Heatwave haze + shimmer
+    // HEATWAVE: blinding glare, haze and rising shimmer
     if (env.heat > 0.03) {
-        ctx.fillStyle = `rgba(255,170,60,${env.heat * 0.14})`; ctx.fillRect(-12, -12, W + 24, H + 24);
-        ctx.strokeStyle = `rgba(255,255,255,${env.heat * 0.22})`; ctx.lineWidth = 2;
-        for (let k = 0; k < 7; k++) {
-            const by = H * 0.6 + k * H * 0.05 - ((t * 20) % 30);
+        const gl = ctx.createRadialGradient(sx, sy, 10, sx, sy, W * 0.55);
+        gl.addColorStop(0, `rgba(255,250,210,${0.55 * env.heat})`); gl.addColorStop(1, "rgba(255,230,160,0)");
+        ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = gl; ctx.fillRect(-12, -12, W + 24, H + 24); ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = `rgba(255,170,60,${env.heat * 0.16})`; ctx.fillRect(-12, -12, W + 24, H + 24);
+        ctx.strokeStyle = `rgba(255,255,255,${env.heat * 0.26})`; ctx.lineWidth = 2;
+        for (let k = 0; k < 9; k++) {
+            const by = H * 0.5 + k * H * 0.055 - ((t * 22) % 30);
             ctx.beginPath();
-            for (let x = 0; x <= W; x += 20) ctx.lineTo(x, by + Math.sin(x * 0.03 + t * 3 + k) * 5);
+            for (let x = 0; x <= W; x += 20) ctx.lineTo(x, by + Math.sin(x * 0.03 + t * 3 + k) * 6);
             ctx.stroke();
         }
     }
  
-    // Earthquake dust
-    if (env.quake > 0.2 && bg.dust.length < 60 && R() < 0.5) bg.dust.push({ x: R() * W, y: H * (0.8 + R() * 0.2), r: 3 + R() * 6, a: 0.5 });
+    // EARTHQUAKE: cracks in the ground, falling rocks and dust
+    if (env.quake > 0.05) {
+        ctx.fillStyle = `rgba(190,160,130,${env.quake * 0.14})`; ctx.fillRect(-12, -12, W + 24, H + 24);
+        ctx.lineJoin = "round";
+        bg.cracks.forEach(c => {
+            ctx.strokeStyle = `rgba(70,42,36,${env.quake * 0.85})`; ctx.lineWidth = 2 + env.quake * 3; ctx.beginPath(); c.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
+            ctx.strokeStyle = `rgba(255,210,170,${env.quake * 0.35})`; ctx.lineWidth = 1; ctx.stroke();
+        });
+        if (env.quake > 0.4 && bg.rocks.length < 28 && R() < 0.14) bg.rocks.push({ x: R() * W, y: -12, vy: 2 + R() * 3, r: 3 + R() * 6, rot: 0, a: 1, hit: false });
+        for (let i = bg.rocks.length - 1; i >= 0; i--) {
+            const k = bg.rocks[i]; k.vy += 0.28; k.y += k.vy; k.rot += 0.15;
+            if (k.y > H * 0.92) { if (!k.hit) { k.hit = true; for (let d = 0; d < 3; d++) bg.dust.push({ x: k.x, y: k.y, r: 4, a: 0.5 }); } k.vy *= -0.3; k.y = H * 0.92; k.a -= 0.04; }
+            ctx.save(); ctx.globalAlpha = Math.max(0, k.a); ctx.translate(k.x, k.y); ctx.rotate(k.rot); ctx.fillStyle = "#8a7469"; ctx.fillRect(-k.r, -k.r * 0.8, k.r * 2, k.r * 1.6); ctx.restore();
+            if (k.a <= 0) bg.rocks.splice(i, 1);
+        }
+        if (env.quake > 0.2 && bg.dust.length < 70 && R() < 0.5) bg.dust.push({ x: R() * W, y: H * (0.8 + R() * 0.2), r: 3 + R() * 6, a: 0.5 });
+    }
     for (let i = bg.dust.length - 1; i >= 0; i--) {
         const d = bg.dust[i]; d.y -= 0.8; d.r += 0.15; d.a -= 0.008;
         ctx.fillStyle = `rgba(190,160,120,${Math.max(0, d.a)})`; ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 7); ctx.fill();
@@ -1410,7 +2124,6 @@ window.onload = () => {
  
     restockShops(false);
     refreshSeedSelector();
-    document.getElementById("crop-selector").addEventListener("change", renderGarden);
     renderGarden();
     renderActionStack();
     updatePlayerStats();

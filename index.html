@@ -11,7 +11,6 @@
 </head>
 <body class="min-h-screen p-4 md:p-6 flex flex-col justify-between overflow-x-hidden">
  
-    <!-- Living, cinematic background -->
     <canvas id="bg-canvas"></canvas>
     <div id="vignette"></div>
     <div id="grain"></div>
@@ -19,10 +18,10 @@
     <!-- HEADER -->
     <header class="w-full max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
         <div class="glass-panel px-5 py-3 flex items-center gap-3">
-            <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-md" style="background:linear-gradient(135deg,#f6a7bb,#e9b45e)">🌷</div>
+            <div class="logo-bubble"><img src="rose.png" alt="" onerror="this.replaceWith('🌷')"></div>
             <div>
                 <div class="flex items-center gap-2">
-                    <h1 class="text-3xl font-bold leading-none">Blooming Days</h1>
+                    <h1 class="script text-4xl font-bold leading-none" style="color:var(--rose-deep)">Blooming Days</h1>
                     <span id="version-badge" class="text-[10px] font-bold text-rose-700 bg-rose-100 border border-rose-300 px-2.5 py-1 rounded-full"></span>
                 </div>
                 <p class="text-xs font-semibold mt-1" style="color:var(--ink-soft)">A dreamy little flower shop &amp; DSA lab</p>
@@ -40,7 +39,6 @@
         </div>
     </header>
  
-    <!-- TABS -->
     <nav class="w-full max-w-7xl mx-auto mb-3 flex gap-2 flex-wrap">
         <button onclick="switchTab('greenhouse')" id="tab-greenhouse" class="tab-btn"><i data-lucide="flower-2" class="w-4 h-4"></i> Greenhouse</button>
         <button onclick="switchTab('inventory')" id="tab-inventory" class="tab-btn"><i data-lucide="package" class="w-4 h-4"></i> Inventory &amp; Tools</button>
@@ -48,7 +46,6 @@
         <button onclick="switchTab('code')" id="tab-code" class="tab-btn"><i data-lucide="code" class="w-4 h-4"></i> Student Code Editor</button>
     </nav>
  
-    <!-- MAIN -->
     <main class="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-5 flex-grow">
  
         <section class="lg:col-span-8 flex flex-col gap-4">
@@ -60,14 +57,10 @@
  
             <!-- GREENHOUSE -->
             <div id="view-greenhouse" class="glass-panel p-6 space-y-4">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4" style="border-bottom:1.5px dashed rgba(214,166,110,.7)">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 fdiv">
                     <div>
-                        <h2 class="text-3xl font-bold leading-none">The Greenhouse</h2>
-                        <p class="text-xs font-semibold mt-1.5" style="color:var(--ink-soft)">Pick a seed, hover a tile to preview the bloom, click to plant. Click again to water, then harvest when it glows.</p>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <span class="text-xs font-bold">Seed bag</span>
-                        <select id="crop-selector" class="field-select"></select>
+                        <h2 class="script text-4xl font-bold leading-none" style="color:var(--rose-deep)">The Greenhouse</h2>
+                        <p class="text-xs font-semibold mt-1.5" style="color:var(--ink-soft)">Pick a seed, hover a flower bed to preview the bloom, click to plant. Click again to water, then harvest when it glows.</p>
                     </div>
                 </div>
                 <div class="flex gap-2 flex-wrap items-center">
@@ -75,25 +68,27 @@
                     <button id="tool-fert" onclick="setTool('fert')" class="tool-pill">🧪 Fertilizer</button>
                     <span class="text-[11px] font-bold" style="color:var(--rose-deep)" id="tool-hint"></span>
                 </div>
-                <div id="garden-grid" class="grid gap-2.5 max-h-[560px] overflow-auto p-1"></div>
+                <div class="text-xs font-bold" style="color:var(--ink-soft)">Seed bag: pick what to plant</div>
+                <div id="seed-picker" class="seed-picker"></div>
+                <div id="garden-grid" class="grid gap-3 max-h-[580px] overflow-auto p-2"></div>
             </div>
  
             <!-- INVENTORY -->
             <div id="view-inventory" class="glass-panel p-6 space-y-4 hidden">
-                <h2 class="text-3xl font-bold leading-none pb-3" style="border-bottom:1.5px dashed rgba(214,166,110,.7)">Satchel &amp; Tools</h2>
-                <div id="inventory-container" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+                <h2 class="script text-4xl font-bold leading-none fdiv" style="color:var(--rose-deep)">Satchel &amp; Tools</h2>
+                <div id="inventory-container" class="inv-wrap"></div>
             </div>
  
             <!-- ORDERS -->
             <div id="view-orders" class="glass-panel p-6 space-y-4 hidden">
-                <h2 class="text-3xl font-bold leading-none pb-3" style="border-bottom:1.5px dashed rgba(214,166,110,.7)">Customer Orders</h2>
+                <h2 class="script text-4xl font-bold leading-none fdiv" style="color:var(--rose-deep)">Customer Orders</h2>
                 <p class="text-xs font-semibold" style="color:var(--ink-soft)">Deliver flowers from your harvest. The coin reward equals the total price of the flowers requested.</p>
-                <div id="orders-list-container" class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2"></div>
+                <div id="orders-list-container" class="orders-wrap"></div>
             </div>
  
             <!-- CODE EDITOR -->
             <div id="view-code" class="glass-panel p-6 flex flex-col flex-grow hidden">
-                <h2 class="text-3xl font-bold leading-none mb-3">Student Code Lab</h2>
+                <h2 class="script text-4xl font-bold leading-none mb-3" style="color:var(--rose-deep)">Student Code Lab</h2>
                 <select id="topic-selector" onchange="loadTopic()" class="field-select w-full mb-4 text-sm p-3"></select>
                 <textarea id="code-editor" class="flex-1 rounded-2xl p-4 code-font text-xs md:text-sm font-medium leading-relaxed min-h-[300px] shadow-inner" spellcheck="false"></textarea>
                 <div class="flex gap-2 mt-4 flex-wrap">
@@ -104,61 +99,71 @@
             </div>
         </section>
  
-        <!-- RIGHT SIDE: storage, calendar, shops, journal -->
+        <!-- RIGHT SIDE -->
         <section class="lg:col-span-4 flex flex-col gap-4">
  
             <div class="glass-panel p-5 flex flex-col gap-3">
                 <h2 class="text-xl font-bold leading-none">Shop Storage</h2>
                 <div>
                     <div class="flex justify-between text-xs font-bold mb-1"><span>💧 Water charges</span><span id="water-text"></span></div>
-                    <div class="w-full h-3 rounded-full overflow-hidden p-0.5" style="background:#e3dcf5;border:1px solid #c9bdea"><div id="water-bar" class="h-full rounded-full transition-all duration-300" style="background:linear-gradient(90deg,#a9c8f5,#8fe0e8)"></div></div>
+                    <div class="w-full h-3 rounded-full overflow-hidden p-0.5" style="background:#e9e2f8;border:1px solid #d3c8f0"><div id="water-bar" class="h-full rounded-full transition-all duration-300" style="background:linear-gradient(90deg,#b5d3f8,#9be6ec)"></div></div>
                 </div>
                 <div>
                     <div class="flex justify-between text-xs font-bold mb-1"><span>🌱 Seeds in bag</span><span id="seeds-text"></span></div>
-                    <div class="w-full h-3 rounded-full overflow-hidden p-0.5" style="background:#dff0d8;border:1px solid #bddcb0"><div id="seeds-bar" class="h-full rounded-full transition-all duration-300" style="background:linear-gradient(90deg,#b5e0a0,#7fcfa0)"></div></div>
+                    <div class="w-full h-3 rounded-full overflow-hidden p-0.5" style="background:#e4f4dc;border:1px solid #c7e5bb"><div id="seeds-bar" class="h-full rounded-full transition-all duration-300" style="background:linear-gradient(90deg,#c0e8ac,#8cd6aa)"></div></div>
                 </div>
                 <div>
                     <div class="flex justify-between text-xs font-bold mb-1"><span>🧪 Fertilizer</span><span id="energy-text"></span></div>
-                    <div class="w-full h-3 rounded-full overflow-hidden p-0.5" style="background:#fbecc8;border:1px solid #f1d58f"><div id="energy-bar" class="h-full rounded-full transition-all duration-300" style="background:linear-gradient(90deg,#f8d98a,#f4b86a)"></div></div>
+                    <div class="w-full h-3 rounded-full overflow-hidden p-0.5" style="background:#fff0d2;border:1px solid #f6dca0"><div id="energy-bar" class="h-full rounded-full transition-all duration-300" style="background:linear-gradient(90deg,#fbe0a0,#f8c47e)"></div></div>
                 </div>
             </div>
  
-            <!-- Calendar + shops (tap to open pop-ups) -->
             <div class="grid grid-cols-2 gap-3">
                 <button onclick="openModal('calendar')" class="cal-widget" aria-label="Open the weather calendar">
                     <div class="cal-side"><span class="cal-month">BLOOM MONTH</span><span class="cal-num" id="cal-day-num">1</span><span class="cal-month">of 30</span></div>
                     <div class="cal-main">
                         <span class="cal-icon" id="cal-icon">☀️</span>
                         <span class="cal-name" id="cal-name">Sunny</span>
+                        <span class="cal-ev" id="cal-event" style="display:none"></span>
                         <span class="cal-sub" id="cal-sub">Tap to see the whole month</span>
                     </div>
                 </button>
                 <button onclick="openModal('seeds')" class="stall stall-seed" aria-label="Open the seed shop">
-                    <div class="awning"></div><div class="stall-ic">🌱</div><div class="stall-name">Seed Shop</div><span class="stall-badge" id="seed-badge">0 in stock</span>
+                    <div class="awning"></div><div class="stall-ic"><img src="sunflower.png" alt="" onerror="this.replaceWith('🌱')"></div><div class="stall-name">Seed Shop</div><span class="stall-badge" id="seed-badge">0 in stock</span>
                 </button>
                 <button onclick="openModal('tools')" class="stall stall-tool" aria-label="Open the tool shop">
                     <div class="awning"></div><div class="stall-ic">🧰</div><div class="stall-name">Tool Shop</div><span class="stall-badge" id="tool-badge">0 in stock</span>
                 </button>
+                <button onclick="openModal('almanac')" class="stall stall-tree" style="grid-column:span 2" aria-label="Open the flower almanac">
+                    <div class="awning"></div><div class="stall-ic"><img src="cherry-blossom.png" alt="" onerror="this.replaceWith('🌳')"></div><div class="stall-name">Flower Almanac</div><span class="stall-badge" id="almanac-badge" style="background:#a58ad8">0 / 10 discovered</span>
+                </button>
             </div>
  
-            <!-- Journal book (action history stack) -->
+            <!-- Garden Journal: flipping book -->
             <div class="glass-panel p-4 flex flex-col gap-3">
-                <h2 class="text-xl font-bold leading-none">Garden Journal</h2>
+                <h2 class="script text-3xl font-bold leading-none" style="color:var(--rose-deep)">Garden Journal</h2>
                 <div class="book">
-                    <div class="ribbon"></div>
-                    <div class="pg left" id="book-left"></div>
-                    <div class="spine"></div>
-                    <div class="pg right" id="book-right"></div>
+                    <div class="book-inner" id="book-inner">
+                        <div class="pg left" id="book-left" onclick="flipJournal(-1)" title="Previous page"></div>
+                        <div class="spine"></div>
+                        <div class="pg right" id="book-right" onclick="flipJournal(1)" title="Next page"></div>
+                        <div class="leaf" id="book-leaf"><div class="leaf-face front pg" id="leaf-front"></div><div class="leaf-face back pg" id="leaf-back"></div></div>
+                    </div>
+                </div>
+                <div class="book-nav">
+                    <button class="nv" id="book-prev" onclick="flipJournal(-1)" aria-label="Previous page">◀</button>
+                    <span class="lbl" id="book-label">Pages 1-2</span>
+                    <button class="nv" id="book-next" onclick="flipJournal(1)" aria-label="Next page">▶</button>
                 </div>
                 <button onclick="triggerUndo()" class="btn-pastel py-2 text-xs flex items-center justify-center gap-2">🪶 Cross out the last line (Undo)</button>
             </div>
         </section>
     </main>
  
-    <!-- POP-UP WINDOW (calendar / seed shop / tool shop) -->
+    <!-- BIG POP-UP (calendar / seed shop / tool shop / almanac) -->
     <div id="modal" class="modal" onclick="if(event.target.classList.contains('modal-backdrop')) closeModal()">
         <div class="modal-backdrop"></div>
-        <div class="modal-card glass-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button>
             <h2 id="modal-title"></h2>
             <p id="modal-sub"></p>
@@ -166,22 +171,25 @@
         </div>
     </div>
  
-    <!-- END OF DAY -->
-    <div id="eod-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden" style="background:rgba(45,15,60,.6);backdrop-filter:blur(5px)">
-        <div class="glass-panel p-8 max-w-md w-full mx-4 text-center space-y-6 animate-bounce-short">
-            <div>
-                <h2 id="eod-title" class="text-4xl font-bold">Day 1 closed</h2>
-                <div class="w-16 h-1 mx-auto mt-2 rounded-full" style="background:var(--gold)"></div>
+    <!-- DAY-END CUTSCENE -->
+    <div id="eod-modal">
+        <div class="letterbox top"></div>
+        <div class="letterbox bot"></div>
+        <div id="petal-layer"></div>
+        <div class="cut-card">
+            <div class="cut-inner">
+                <div class="cut-kicker">✿ THE DAY DRIFTS TO A CLOSE ✿</div>
+                <h2 id="eod-title" class="cut-title">Day 1 closed</h2>
+                <p id="eod-line" class="cut-line"></p>
+                <div class="cut-coins"><span class="text-2xl">🪙</span><b id="eod-coins">+0</b><span class="text-xs font-bold" style="color:#8a5a10">coins today</span></div>
+                <div class="cut-stats">
+                    <div><b id="eod-sales">0</b>Orders fulfilled</div>
+                    <div><b id="eod-harvests">0</b>Flowers harvested</div>
+                    <div><b id="eod-level">1</b>Garden level</div>
+                </div>
+                <div id="eod-next" class="cut-next"></div>
+                <button onclick="closeEndOfDayModal()" class="btn-pastel btn-mint py-3 text-sm mx-auto px-10">Wake up to the next day 🌅</button>
             </div>
-            <div class="py-4 rounded-2xl" style="background:rgba(255,236,190,.7);border:1px solid var(--gold-soft)">
-                <span class="text-4xl font-bold title-font" id="eod-coins">+0</span>
-                <p class="text-xs font-bold mt-1" style="color:var(--ink-soft)">Coins earned today</p>
-            </div>
-            <div class="grid grid-cols-2 gap-4 text-xs font-bold">
-                <div class="p-3 rounded-xl" style="background:rgba(255,255,255,.6)"><span id="eod-sales" class="text-xl block title-font">0</span><span>Orders fulfilled</span></div>
-                <div class="p-3 rounded-xl" style="background:rgba(255,255,255,.6)"><span id="eod-harvests" class="text-xl block title-font">0</span><span>Flowers harvested</span></div>
-            </div>
-            <button onclick="closeEndOfDayModal()" class="w-full btn-pastel btn-mint py-4 text-sm">Start the next day</button>
         </div>
     </div>
  
