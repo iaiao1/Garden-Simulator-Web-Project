@@ -458,3 +458,57 @@ textarea, input[type=text], input[type=number] { cursor: text !important; }
 .modal-card.small { width: min(640px, 98vw); }
 .endday-actions { display: flex; gap: 14px; justify-content: center; margin: 18px 0 6px; flex-wrap: wrap; }
 @media (prefers-reduced-motion: reduce) { .click-ring, .click-bloom, .trail-dot { animation: none; opacity: 0; } }
+ 
+/* ---------- NPC friends ---------- */
+.npc { position: fixed; bottom: 6px; z-index: 30; width: 150px; text-align: center; outline: none; }
+.npc.left { left: 8px; } .npc.right { right: 8px; }
+.npc::after { content: ""; display: block; width: 92px; height: 14px; margin: -4px auto 0; border-radius: 50%; background: radial-gradient(rgba(90, 40, 80, 0.35), transparent 70%); }
+.npc:hover .npc-art, .npc:focus-visible .npc-art { transform: scale(1.07) rotate(-2deg); filter: drop-shadow(0 0 14px rgba(255, 200, 230, 0.95)); }
+.npc-art { position: relative; width: 150px; height: 205px; margin: 0 auto; transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.25s; transform-origin: bottom center; }
+.npc.fairy .npc-art { animation: npcFloat 3s infinite ease-in-out; }
+.npc.dwarf .npc-art { animation: npcBob 2.4s infinite ease-in-out; }
+.npc-art .body { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; z-index: 2; user-select: none; -webkit-user-drag: none; filter: drop-shadow(0 4px 6px rgba(120, 60, 100, 0.3)); }
+.npc-art .wing { position: absolute; width: 190px; left: -20px; top: 26px; z-index: 1; animation: wingFlap 0.55s infinite ease-in-out; transform-origin: center; filter: drop-shadow(0 4px 6px rgba(150, 70, 110, 0.3)); }
+.npc-art .hatflower { position: absolute; left: 76px; top: 21px; width: 34px; height: 34px; z-index: 3; object-fit: contain; transform: rotate(16deg); filter: drop-shadow(0 2px 3px rgba(120, 60, 100, 0.35)); }
+.npc-tag { display: inline-block; margin-top: 2px; background: rgba(255, 248, 240, 0.96); border: 1.5px solid var(--rose); border-radius: 9999px; padding: 2px 10px; font-weight: 700; font-size: 11px; color: var(--plum); box-shadow: 0 4px 10px rgba(190, 90, 140, 0.3); white-space: nowrap; }
+.npc-hint { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); white-space: nowrap; background: #fff; border: 2px solid var(--rose-deep); color: var(--rose-deep); font-weight: 700; font-size: 11px; padding: 3px 10px; border-radius: 14px; box-shadow: 0 6px 12px rgba(190, 90, 140, 0.35); animation: hintPulse 1.4s infinite ease-in-out; z-index: 4; }
+.npc-hint::after { content: ""; position: absolute; left: 50%; bottom: -8px; margin-left: -6px; border: 6px solid transparent; border-top-color: var(--rose-deep); border-bottom: 0; }
+ 
+#npc-dialog { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(860px, 96vw); z-index: 60; display: none; }
+#npc-dialog.open { display: block; animation: dlgUp 0.4s cubic-bezier(0.3, 1.4, 0.6, 1); }
+.dlg-inner { display: flex; gap: 16px; align-items: flex-end; padding: 14px 22px 16px 14px; }
+.dlg-portrait { flex: 0 0 118px; }
+.dlg-portrait.talking .npc-art { animation: talkBob 0.32s infinite ease-in-out; }
+.npc-art.mini { width: 112px; height: 153px; }
+.npc-art.mini .wing { width: 142px; left: -15px; top: 19px; }
+.npc-art.mini .hatflower { left: 57px; top: 15px; width: 26px; height: 26px; }
+.dlg-main { flex: 1; min-width: 0; }
+.dlg-name { font-family: 'Dancing Script', cursive; font-weight: 700; font-size: 32px; line-height: 1; color: var(--rose-deep); }
+.dlg-role { font-size: 11px; font-weight: 700; color: var(--ink-soft); margin-bottom: 6px; }
+.dlg-text { min-height: 84px; padding: 10px 14px; border-radius: 16px; background: rgba(255, 255, 255, 0.72); border: 1.5px solid rgba(244, 166, 192, 0.6); font-size: 15px; font-weight: 600; line-height: 1.5; white-space: pre-line; color: var(--ink); }
+.dlg-choices { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.dlg-choice { padding: 7px 14px; border-radius: 9999px; font-size: 12px; font-weight: 700; color: var(--plum); background: linear-gradient(180deg, #fff, #ffe6ef); border: 1.5px solid var(--rose); box-shadow: 0 3px 0 #f0b4cb; transition: transform 0.15s; }
+.dlg-choice:hover { transform: translateY(-2px); }
+.dlg-choice.alt { background: linear-gradient(180deg, #fff, #efe6ff); border-color: #b9a4ea; box-shadow: 0 3px 0 #cdbcf2; }
+.dlg-choice.bye { background: linear-gradient(180deg, #fff, #f2f2f2); border-color: #d6c9d3; box-shadow: 0 3px 0 #e2d8df; color: var(--ink-soft); }
+.dlg-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+.dlg-foot:empty { display: none; }
+.dlg-count { font-size: 11px; font-weight: 700; color: var(--ink-soft); text-align: center; }
+.dlg-nav { padding: 6px 16px; border-radius: 9999px; font-size: 12px; font-weight: 700; color: var(--plum); background: #fff; border: 1.5px solid var(--rose); }
+.dlg-nav.primary { background: linear-gradient(180deg, #ffd3e0, #f6a6c1); color: #7a2a52; box-shadow: 0 3px 0 #e18aa9; }
+.dlg-nav:disabled { opacity: 0.4; }
+.dlg-close { position: absolute; top: 8px; right: 12px; z-index: 5; width: 28px; height: 28px; border-radius: 50%; background: #fff; border: 1.5px solid var(--rose); color: var(--rose-deep); font-weight: 700; }
+ 
+@keyframes npcFloat { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-14px) rotate(1.5deg); } }
+@keyframes npcBob { 0%, 100% { transform: translateY(0) scaleY(1); } 50% { transform: translateY(-4px) scaleY(1.015); } }
+@keyframes wingFlap { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(0.55); } }
+@keyframes hintPulse { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-5px); } }
+@keyframes talkBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes dlgUp { from { opacity: 0; transform: translateX(-50%) translateY(30px) scale(0.96); } to { opacity: 1; transform: translateX(-50%); } }
+@media (max-width: 1000px) {
+    .npc { width: 96px; } .npc-art { width: 96px; height: 131px; }
+    .npc-art .wing { width: 122px; left: -13px; top: 17px; } .npc-art .hatflower { left: 49px; top: 13px; width: 22px; height: 22px; }
+    .npc-tag { font-size: 9px; padding: 1px 7px; }
+    .dlg-inner { flex-direction: column; align-items: stretch; } .dlg-portrait { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .npc.fairy .npc-art, .npc.dwarf .npc-art, .npc-art .wing, .npc-hint { animation: none; } }

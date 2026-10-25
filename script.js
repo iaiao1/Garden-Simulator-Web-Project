@@ -1,4 +1,4 @@
-const APP_VERSION = "0.25.0";
+const APP_VERSION = "0.26.0";
 
 let pyodideInstance = null;
 let gardenGridState = {};
@@ -2481,6 +2481,178 @@ function stopMusic() {
 function toggleMusic() { Music.on ? stopMusic() : startMusic(); }
 
 // ---------------------------------------------------------------
+// NPC friends: Fluttera the Butterfly Fairy (left) and Mossy the Flower Dwarf (right)
+// Click them to chat about the game, how to play it, and why it teaches data structures & algorithms.
+// ---------------------------------------------------------------
+const NPCS = {
+    fairy: {
+        name: "Fluttera", role: "Butterfly Fairy", side: "left",
+        menu: "Hi hi, dear gardener! I'm Fluttera. What would you like to hear about?",
+        topics: [
+            { id: "intro", icon: "🌸", label: "Welcome to Blooming Days", pages: [
+                "Hello, dear gardener! I'm Fluttera, the Butterfly Fairy. Welcome to Blooming Days, your very own cozy flower shop!",
+                "Here you plant seeds, water them, harvest pretty blooms, and deliver bouquets to sweet customers. Every coin you earn helps your little shop grow.",
+                "But this garden has a secret: it is also a classroom! Almost every feature quietly teaches a data structure or an algorithm.",
+                "Mossy the Flower Dwarf, over on the right, can show you how to play. And I'll tell you why all of this matters!"] },
+            { id: "why", icon: "✨", label: "Why it matters", pages: [
+                "Think of a computer as a busy garden. There is SO much to keep organized! Data structures are the beds, shelves and baskets that hold information neatly.",
+                "Algorithms are the recipes: step-by-step ways to search, sort, or walk through all that data.",
+                "Choose the right structure and a program becomes faster, lighter and easier to understand. Choose the wrong one and even a small program can crawl.",
+                "That is what Big O tells us: how the work grows when the garden grows. Looking up a day in the 30-day calendar tree takes about 5 steps instead of 30!",
+                "Apps, maps, games and search engines all depend on these ideas. Learning them while having fun helps them stick."] },
+            { id: "purpose", icon: "🎯", label: "Purpose of the game", pages: [
+                "This game exists so you can SEE data structures and algorithms at work, not just read about them.",
+                "Your actions are the data. Planting, watering, buying and delivering all go through structures that keep everything in order.",
+                "Open the Student Code Editor and run a topic: your own Python code starts driving the game! Topics 1 to 5 are ready, and more chapters will bloom later.",
+                "Make a mistake and the garden shows it. If a grid formula uses the wrong width, flowers pop up on the wrong tiles! Spot it, fix it, and you truly understand it."] },
+            { id: "events", icon: "🦋", label: "Events & mutations", pages: [
+                "On special days my friends visit: the Butterfly, Rainbow and Cotton Candy events! They are rolled at random for every player, and you can spot them on the Bloom Calendar.",
+                "During an event, magic lands on random flowers and mutates them. Pollinated is x1.5, Prismatic is x3.5, and Cotton Candy is a sweet x4!",
+                "Behind the scenes a mutation is a NODE MUTATION: your flowers live in a binary search tree keyed by tile number, and the game changes one node's data in place without touching its key.",
+                "Mutated flowers keep their bonus when harvested, and they pay extra in customer orders. Lucky you!"] }
+        ]
+    },
+    dwarf: {
+        name: "Florian", role: "Flower Dwarf", side: "right",
+        menu: "Well met, gardener! I'm Mossy. Ask away, I know every corner of this greenhouse.",
+        topics: [
+            { id: "play", icon: "🌱", label: "How to play", pages: [
+                "You start with 500 coins, 30 water, and 3 Rose plus 3 Sakura seeds. Pick a seed in the Seed Bag, then hover an empty bed to preview the bloom.",
+                "Click the empty bed to plant. Click the plant to water it (costs 1 water). Each flower grows through 4 stages, and it needs water at every stage.",
+                "When it glows ✨ it is ready: click it to harvest. The flower goes into your Harvest Basket, ready for customers.",
+                "In a hurry? Switch to the Fertilizer tool and click a growing flower to bloom it right away."] },
+            { id: "money", icon: "🪙", label: "Coins, shops & orders", pages: [
+                "Customer Orders pay the total price of the flowers they ask for. Mutated flowers are used first, so they bring bonus coins!",
+                "The Seed Shop has a random shelf every dawn. Common seeds are open, but the Uncommon (300), Rare (800), Legendary (2000) and Mythical (5000) tiers must be unlocked first.",
+                "The Tool Shop sells water refills, fertilizer, sprinkler upgrades, new flower beds and repair kits. Its stock is random too, so grab good deals!",
+                "Deliveries also give XP and levels, and the Flower Almanac pays big rewards when you complete a whole tier."] },
+            { id: "weather", icon: "🌦️", label: "Weather & the day", pages: [
+                "Every day has its own weather. Rain waters everything for free. Wind makes flowers grow about 30% faster. A heatwave slows growth by 25% and watering costs 2.",
+                "An earthquake damages one planted tile. Buy a Repair Kit in the Tool Shop to fix it. Sunny days are calm and gentle.",
+                "A day runs from 6 AM to midnight. At dawn the shops restock and your watering can refills to 30. Done early? Press 🌙 End Day to sleep until tomorrow!",
+                "The Bloom Calendar on the right shows the whole month, special events included. Tap any day to look it up."] },
+            { id: "journal", icon: "📖", label: "Journal & undo", pages: [
+                "Everything you do is written in the Garden Journal: planting, watering, harvesting, shopping and delivering. Flip its pages with the arrows.",
+                "Press 'Cross out the last line' to undo it for real: the seed comes back, the water is refunded, or the flower returns to the growth stage it had before.",
+                "Sometimes it is too late, like undoing a harvest after that flower was sold. Then the line gets a little lock 🔒."] },
+            { id: "dsa", icon: "🗺️", label: "Where the data structures hide", pages: [
+                "Topic 1, Stacks: the Garden Journal. Every new line is pushed on top, and 'Cross out' pops the last one (last in, first out). It also teaches OOP and Big O.",
+                "Topic 2, Queues: the weather forecast waits in line like a FIFO queue. The day at the front becomes today.",
+                "Topic 3, Arrays and 2D lists: the greenhouse is a grid. A tile's index is row × columns + column, and buying beds makes the array grow.",
+                "Topic 4, Trees: the Flower Almanac is a tree of Almanac → tiers → flowers. Walk it with preorder, inorder, postorder and level-order traversals.",
+                "Topic 5, BST and node mutation: tap a calendar day to watch a binary search find it, and watch events mutate a flower's node in place.",
+                "Topics 6 to 11 (hash tables, graphs, sorting, searching, Dijkstra and dynamic programming) are waiting for future updates!"] }
+        ]
+    }
+};
+let npcOpen = null, npcTopic = null, npcPage = 0, npcTimer = null, npcFull = "";
+const npcMet = {};
+
+const npcArt = (id, cls = "") => id === "fairy"
+    ? `<div class="npc-art ${cls}"><img class="wing" src="assets/butterfly-4.png" alt="" onerror="this.remove()"><img class="body" src="npc-fairy.png" alt="" draggable="false"></div>`
+    : `<div class="npc-art ${cls}"><img class="body" src="npc-dwarf.png" alt="" draggable="false"><img class="hatflower" src="rose.png" alt="" onerror="this.remove()"></div>`;
+
+function mountNPCs() {
+    Object.entries(NPCS).forEach(([id, n]) => {
+        const el = document.createElement("div");
+        el.className = `npc ${n.side} ${id}`; el.id = "npc-" + id;
+        el.setAttribute("role", "button"); el.setAttribute("tabindex", "0"); el.setAttribute("aria-label", `Talk to ${n.name}, the ${n.role}`);
+        el.onclick = () => openNPC(id);
+        el.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openNPC(id); } };
+        el.innerHTML = `${npcArt(id)}<span class="npc-tag">${n.name} · ${n.role}</span><span class="npc-hint">💬 Talk to me!</span>`;
+        document.body.appendChild(el);
+    });
+    const dlg = document.createElement("div");
+    dlg.id = "npc-dialog"; dlg.className = "glass-panel"; dlg.setAttribute("role", "dialog");
+    dlg.innerHTML = `<button class="dlg-close" onclick="closeNPC()" aria-label="Close">✕</button>
+        <div class="dlg-inner"><div class="dlg-portrait" id="dlg-portrait"></div>
+        <div class="dlg-main"><div class="dlg-name" id="dlg-name"></div><div class="dlg-role" id="dlg-role"></div>
+        <div class="dlg-text" id="dlg-text" onclick="dlgTextClick()" title="Click to skip or continue"></div>
+        <div class="dlg-choices" id="dlg-choices"></div><div class="dlg-foot" id="dlg-foot"></div></div></div>`;
+    document.body.appendChild(dlg);
+    document.addEventListener("keydown", e => { if (e.key === "Escape") closeNPC(); });
+}
+
+function typeText(t) {
+    clearInterval(npcTimer);
+    npcFull = t;
+    const el = document.getElementById("dlg-text"), por = document.getElementById("dlg-portrait");
+    el.textContent = ""; por.classList.add("talking");
+    let i = 0;
+    npcTimer = setInterval(() => {
+        i += 2; el.textContent = t.slice(0, i);
+        if (i >= t.length) { clearInterval(npcTimer); npcTimer = null; por.classList.remove("talking"); }
+    }, 22);
+}
+
+function skipTyping() {
+    if (!npcTimer) return false;
+    clearInterval(npcTimer); npcTimer = null;
+    document.getElementById("dlg-text").textContent = npcFull;
+    document.getElementById("dlg-portrait").classList.remove("talking");
+    return true;
+}
+
+function openNPC(id) {
+    if (eodOpen) return;
+    const n = NPCS[id];
+    npcOpen = id;
+    const hint = document.querySelector(`#npc-${id} .npc-hint`); if (hint) hint.remove();
+    if (!npcMet[id]) {
+        npcMet[id] = true; playerXP += 15;
+        showToast(`You met ${n.name}, the ${n.role}! +15 XP ✨`);
+        pushAction(`Met ${n.name} the ${n.role}`);
+        updatePlayerStats();
+    }
+    document.getElementById("dlg-portrait").innerHTML = npcArt(id, "mini");
+    document.getElementById("dlg-name").textContent = n.name;
+    document.getElementById("dlg-role").textContent = n.role;
+    document.getElementById("npc-dialog").classList.add("open");
+    showMenu();
+}
+
+function showMenu() {
+    const n = NPCS[npcOpen], other = npcOpen === "fairy" ? "dwarf" : "fairy";
+    npcTopic = null; npcPage = 0;
+    typeText(n.menu);
+    document.getElementById("dlg-choices").innerHTML = n.topics.map(t => `<button class="dlg-choice" onclick="showTopic('${t.id}')">${t.icon} ${t.label}</button>`).join("")
+        + `<button class="dlg-choice alt" onclick="openNPC('${other}')">${other === "fairy" ? "🦋" : "🧙"} Talk to ${NPCS[other].name}</button><button class="dlg-choice bye" onclick="closeNPC()">Goodbye 👋</button>`;
+    document.getElementById("dlg-foot").innerHTML = "";
+}
+
+function showTopic(tid) {
+    npcTopic = NPCS[npcOpen].topics.find(t => t.id === tid);
+    npcPage = 0;
+    renderNPCPage();
+}
+
+function renderNPCPage() {
+    const t = npcTopic, last = npcPage >= t.pages.length - 1;
+    typeText(t.pages[npcPage]);
+    document.getElementById("dlg-choices").innerHTML = "";
+    document.getElementById("dlg-foot").innerHTML = `<button class="dlg-nav" ${npcPage ? "" : "disabled"} onclick="npcStep(-1)">◀ Back</button>
+        <span class="dlg-count">${t.icon} ${t.label} · ${npcPage + 1}/${t.pages.length}</span>
+        <button class="dlg-nav primary" onclick="npcStep(1)">${last ? "Back to menu" : "Next ▶"}</button>`;
+}
+
+function npcStep(d) {
+    if (!npcTopic) return;
+    const next = npcPage + d;
+    if (next < 0) return;
+    if (next >= npcTopic.pages.length) { showMenu(); return; }
+    npcPage = next;
+    renderNPCPage();
+}
+
+function dlgTextClick() { if (!skipTyping() && npcTopic) npcStep(1); }
+
+function closeNPC() {
+    clearInterval(npcTimer); npcTimer = null; npcOpen = null; npcTopic = null;
+    const d = document.getElementById("npc-dialog");
+    if (d) d.classList.remove("open");
+}
+
+// ---------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------
 window.onload = () => {
@@ -2518,6 +2690,7 @@ window.onload = () => {
     });
     loadTopic();
 
+    mountNPCs();
     switchTab("greenhouse");
     initPyodide().catch(() => {});
 };
