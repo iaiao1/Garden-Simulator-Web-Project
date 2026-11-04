@@ -10,11 +10,11 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="min-h-screen p-4 md:p-6 flex flex-col justify-between overflow-x-hidden">
- 
+
     <canvas id="bg-canvas"></canvas>
     <div id="vignette"></div>
     <div id="grain"></div>
- 
+
     <!-- HEADER -->
     <header class="w-full max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
         <div class="glass-panel px-5 py-3 flex items-center gap-3">
@@ -27,7 +27,7 @@
                 <p class="text-xs font-semibold mt-1" style="color:var(--ink-soft)">A dreamy little flower shop &amp; DSA lab</p>
             </div>
         </div>
- 
+
         <div class="flex items-center gap-3 flex-wrap">
             <div class="glass-panel plaque"><span class="text-xl">🪙</span><div><div class="lbl">Coins</div><div class="val" id="coins-text">500 Coins</div></div></div>
             <div class="glass-panel plaque"><span class="text-xl">⭐</span><div><div class="lbl">Level &amp; XP</div><div class="val" id="level-xp-text">Lvl 1 (0/100 XP)</div></div></div>
@@ -41,23 +41,26 @@
             </div>
         </div>
     </header>
- 
+
     <nav class="w-full max-w-7xl mx-auto mb-3 flex gap-2 flex-wrap">
         <button onclick="switchTab('greenhouse')" id="tab-greenhouse" class="tab-btn"><i data-lucide="flower-2" class="w-4 h-4"></i> Greenhouse</button>
         <button onclick="switchTab('inventory')" id="tab-inventory" class="tab-btn"><i data-lucide="package" class="w-4 h-4"></i> Inventory &amp; Tools</button>
         <button onclick="switchTab('orders')" id="tab-orders" class="tab-btn"><i data-lucide="clipboard-list" class="w-4 h-4"></i> Customer Orders</button>
         <button onclick="switchTab('code')" id="tab-code" class="tab-btn"><i data-lucide="code" class="w-4 h-4"></i> Student Code Editor</button>
+        <button onclick="switchTab('hashDebug')" id="tab-hashDebug" class="px-5 py-3 rounded-2xl text-xs font-extrabold text-rose-700 bg-white/60 hover:bg-white transition-all flex items-center gap-2 cursor-pointer border border-rose-200 shadow-sm">
+            <i data-lucide="cpu" class="w-4 h-4 text-rose-500"></i> Hash Inspector
+        </button>
     </nav>
- 
+
     <main class="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-5 flex-grow">
- 
+
         <section class="lg:col-span-8 flex flex-col gap-4">
- 
+
             <div id="weather-banner" class="glass-panel px-5 py-3 flex items-center gap-3 text-sm font-bold">
                 <span id="banner-icon" class="text-xl">☀️</span>
                 <span id="banner-text">Sunny day: everything grows at normal speed.</span>
             </div>
- 
+
             <!-- GREENHOUSE -->
             <div id="view-greenhouse" class="glass-panel p-6 space-y-4">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 fdiv">
@@ -75,36 +78,59 @@
                 <div id="seed-picker" class="seed-picker"></div>
                 <div id="garden-grid" class="grid gap-3 max-h-[580px] overflow-auto p-2"></div>
             </div>
- 
+
             <!-- INVENTORY -->
             <div id="view-inventory" class="glass-panel p-6 space-y-4 hidden">
                 <h2 class="script text-4xl font-bold leading-none fdiv" style="color:var(--rose-deep)">Satchel &amp; Tools</h2>
                 <div id="inventory-container" class="inv-wrap"></div>
             </div>
- 
+
             <!-- ORDERS -->
             <div id="view-orders" class="glass-panel p-6 space-y-4 hidden">
                 <h2 class="script text-4xl font-bold leading-none fdiv" style="color:var(--rose-deep)">Customer Orders</h2>
                 <p class="text-xs font-semibold" style="color:var(--ink-soft)">Deliver flowers from your harvest. The coin reward equals the total price of the flowers requested.</p>
                 <div id="orders-list-container" class="orders-wrap"></div>
             </div>
- 
+
+            <!-- Hash Table Visual Debug Panel -->
+            <div id="view-hash-debug" class="glass-panel p-6 space-y-4 hidden">
+                <h2 class="text-base font-extrabold text-rose-900 flex items-center gap-2 border-b border-rose-200/60 pb-3">
+                    <i data-lucide="cpu" class="w-5 h-5 text-rose-500"></i> Hash Table & Chaining Live Inspector (Topic 6)
+                </h2>
+                <p class="text-xs text-rose-700/80">Real-time visualization of VIP customer order hashing, bucket distribution, collision chaining, and load factor rehashing.</p>
+    
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                    <div class="bg-white/80 p-3 rounded-xl border border-rose-200 text-xs font-bold text-rose-800">
+                        <span>Table Capacity (Buckets): </span><span id="hash-capacity" class="text-rose-600">5</span>
+                </div>
+                <div class="bg-white/80 p-3 rounded-xl border border-rose-200 text-xs font-bold text-rose-800">
+                    <span>Total Stored Orders: </span><span id="hash-count" class="text-rose-600">0</span>
+                </div>
+                <div class="bg-white/80 p-3 rounded-xl border border-rose-200 text-xs font-bold text-rose-800">
+                    <span>Load Factor: </span><span id="hash-load-factor" class="text-rose-600">0.00</span>
+                </div>
+            </div>
+
+    <!-- Buckets Container -->
+    <div id="hash-buckets-container" class="space-y-2.5 max-h-72 overflow-auto"></div>
+</div>
+
             <!-- CODE EDITOR -->
             <div id="view-code" class="glass-panel p-6 flex flex-col flex-grow hidden">
                 <h2 class="script text-4xl font-bold leading-none mb-3" style="color:var(--rose-deep)">Student Code Lab</h2>
                 <select id="topic-selector" onchange="loadTopic()" class="field-select w-full mb-4 text-sm p-3"></select>
                 <textarea id="code-editor" class="flex-1 rounded-2xl p-4 code-font text-xs md:text-sm font-medium leading-relaxed min-h-[300px] shadow-inner" spellcheck="false"></textarea>
                 <div class="flex gap-2 mt-4 flex-wrap">
-                    <button onclick="runPythonCode()" class="flex-1 btn-pastel py-3 flex items-center justify-center gap-2 text-sm min-w-[140px]"><i data-lucide="play" class="w-4 h-4"></i> Run Python Code</button>
-                    <button onclick="runAllPythonCode()" class="flex-1 btn-pastel btn-mint py-3 flex items-center justify-center gap-2 text-sm min-w-[140px]"><i data-lucide="fast-forward" class="w-4 h-4"></i> Run All Topics</button>
+                    <button id="run-topic-btn" onclick="runPythonCode()" class="flex-1 btn-pastel py-3 flex items-center justify-center gap-2 text-sm min-w-[140px]"><i data-lucide="play" class="w-4 h-4"></i> Run Python Code</button>
+                    <button id="run-all-btn" onclick="runAllPythonCode()" class="flex-1 btn-pastel btn-mint py-3 flex items-center justify-center gap-2 text-sm min-w-[140px]"><i data-lucide="fast-forward" class="w-4 h-4"></i> Run All Topics</button>
                 </div>
                 <div id="output-console" class="mt-4 rounded-xl p-4 text-xs max-h-40 overflow-auto font-mono whitespace-pre-wrap shadow-inner"></div>
             </div>
         </section>
- 
+
         <!-- RIGHT SIDE -->
         <section class="lg:col-span-4 flex flex-col gap-4">
- 
+
             <div class="glass-panel p-5 flex flex-col gap-3">
                 <h2 class="text-xl font-bold leading-none">Shop Storage</h2>
                 <div>
@@ -120,7 +146,7 @@
                     <div class="w-full h-3 rounded-full overflow-hidden p-0.5" style="background:#fff0d2;border:1px solid #f6dca0"><div id="energy-bar" class="h-full rounded-full transition-all duration-300" style="background:linear-gradient(90deg,#fbe0a0,#f8c47e)"></div></div>
                 </div>
             </div>
- 
+
             <div class="grid grid-cols-2 gap-3">
                 <button onclick="openModal('calendar')" class="cal-widget" aria-label="Open the weather calendar">
                     <div class="cal-side"><span class="cal-month">BLOOM MONTH</span><span class="cal-num" id="cal-day-num">1</span><span class="cal-month">of 30</span></div>
@@ -137,11 +163,11 @@
                 <button onclick="openModal('tools')" class="stall stall-tool" aria-label="Open the tool shop">
                     <div class="awning"></div><div class="stall-ic">🧰</div><div class="stall-name">Tool Shop</div><span class="stall-badge" id="tool-badge">0 in stock</span>
                 </button>
-                <button onclick="openModal('almanac')" class="stall stall-tree" style="grid-column:span 2" aria-label="Open the flower almanac">
+                <button onclick="openAlmanacBook()" class="stall stall-tree" style="grid-column:span 2" aria-label="Open the flower almanac">
                     <div class="awning"></div><div class="stall-ic"><img src="cherry-blossom.png" alt="" onerror="this.replaceWith('🌳')"></div><div class="stall-name">Flower Almanac</div><span class="stall-badge" id="almanac-badge" style="background:#a58ad8">0 / 10 discovered</span>
                 </button>
             </div>
- 
+
             <!-- Garden Journal: flipping book -->
             <div class="glass-panel p-4 flex flex-col gap-3">
                 <h2 class="script text-3xl font-bold leading-none" style="color:var(--rose-deep)">Garden Journal</h2>
@@ -162,7 +188,7 @@
             </div>
         </section>
     </main>
- 
+
     <!-- BIG POP-UP (calendar / seed shop / tool shop / almanac) -->
     <div id="modal" class="modal" onclick="if(event.target.classList.contains('modal-backdrop')) closeModal()">
         <div class="modal-backdrop"></div>
@@ -173,7 +199,7 @@
             <div id="modal-body"></div>
         </div>
     </div>
- 
+
     <!-- DAY-END CUTSCENE -->
     <div id="eod-modal">
         <div class="letterbox top"></div>
@@ -195,7 +221,7 @@
             </div>
         </div>
     </div>
- 
+
     <script src="script.js"></script>
 </body>
 </html>

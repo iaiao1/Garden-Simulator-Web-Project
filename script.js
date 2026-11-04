@@ -1,4 +1,4 @@
-const APP_VERSION = "0.26.0";
+const APP_VERSION = "0.32.0";
 
 let pyodideInstance = null;
 let gardenGridState = {};
@@ -184,11 +184,16 @@ print("Climate Queue (FIFO) successfully applied to Weather Calendar!")
     3: {
         title: "Static/Dynamic Arrays, 2D Lists, & Memory Structures",
         code: `# Topic 3: Static/Dynamic Arrays, 2D Lists, & Memory Structures
-from js import addPlantToGrid, getGridCols
+from js import addPlantToGrid, pushAction
 
+# Safe fallback import for getGridCols to prevent ImportError
+try:
+    from js import getGridCols
+except ImportError:
+    def getGridCols():
+        return 10
 
 GRID_SIZE = 10
-
 
 class GardenGrid:
     def __init__(self, size=GRID_SIZE):
@@ -196,23 +201,21 @@ class GardenGrid:
         self.grid = [[None for _ in range(size)] for _ in range(size)]
 
     def plant_at(self, row, col, crop_name):
-        cols = getGridCols()                 # how many columns the greenhouse has right now
+        cols = getGridCols()
         if 0 <= row < self.size and 0 <= col < cols:
             self.grid[row][col] = crop_name
-            pos = (row * cols) + col         # row-major index: use the REAL width, not GRID_SIZE
+            pos = (row * cols) + col
             addPlantToGrid(pos, crop_name)
+            pushAction(f"Planted {crop_name} at Grid ({row}, {col})")
             return True
         return False
 
-
 garden = GardenGrid()
-
 
 def plant_crop(row, col, crop_name):
     return garden.plant_at(row, col, crop_name)
 
-
-print("Topic 3 2D List Garden Grid ready!")
+print("Topic 3 2D List Garden Grid ready with dynamic column support!")
 `
     },
     4: {
@@ -524,13 +527,157 @@ print("Tap a day in the Bloom Calendar to see your search path.")
 print("During a special event, flower mutations now run through garden_mutate()!")
 `
     },
-    6: { title: "Hash Tables, Collisions, & Rehashing", code: `# Topic 6: Hash Tables, Collisions, & Rehashing\n# ==== WRITE YOUR CODE HERE ====` },
-    7: { title: "Graph Foundations, Adjacency Matrices/Lists, & DFS/BFS", code: `# Topic 7: Graph Foundations, Adjacency Matrices/Lists, & DFS/BFS\n# ==== WRITE YOUR CODE HERE ====` },
-    8: { title: "Sorting Algorithms (Bubble, Insertion, Selection, Quick, & Merge Sort)", code: `# Topic 8: Sorting Algorithms\n# ==== WRITE YOUR CODE HERE ====` },
-    9: { title: "Searching Algorithms (Linear Search vs. Binary Search)", code: `# Topic 9: Searching Algorithms\n# ==== WRITE YOUR CODE HERE ====` },
-    10: { title: "Advanced Strategic Paradigms (Dijkstra's Algorithm & Greedy Patterns)", code: `# Topic 10: Advanced Strategic Paradigms\n# ==== WRITE YOUR CODE HERE ====` },
-    11: { title: "Dynamic Programming (DP), Memoization, & Divide-and-Conquer", code: `# Topic 11: Dynamic Programming (DP)\n# ==== WRITE YOUR CODE HERE ====` }
+
+    6: {
+        title: "Hash Tables, Collisions, & Rehashing",
+        code: `# Topic 6: Hash Tables, Collisions, & Rehashing
+from js import renderVisualHashTable, pushAction
+
+class GreenhouseHashTable:
+    def __init__(self, capacity=5):
+        self.capacity = capacity
+        self.size = 0
+        self.buckets = [[] for _ in range(capacity)]
+
+    def _hash(self, key):
+        return sum(ord(char) for char in str(key)) % self.capacity
+
+    def insert(self, key, value):
+        index = self._hash(key)
+        bucket = self.buckets[index]
+        
+        # Check for existing key and update
+        for item in bucket:
+            if item[0] == key:
+                item[1] = value
+                renderVisualHashTable(self.buckets, self.capacity, self.size)
+                return
+        
+        bucket.append([key, value])
+        self.size += 1
+        print(f"Inserted VIP Order [{key}] into Hash Bucket {index} via Chaining.")
+
+        # Check load factor (> 0.75) to trigger dynamic rehashing
+        if self.size / self.capacity > 0.75:
+            self.rehash()
+        else:
+            renderVisualHashTable(self.buckets, self.capacity, self.size)
+
+    def search(self, key):
+        index = self._hash(key)
+        for item in self.buckets[index]:
+            if item[0] == key:
+                return item[1]
+        return None
+
+    def rehash(self):
+        old_buckets = self.buckets
+        self.capacity *= 2
+        self.size = 0
+        self.buckets = [[] for _ in range(self.capacity)]
+        
+        for bucket in old_buckets:
+            for key, value in bucket:
+                self.insert(key, value)
+        print(f"Rehashing triggered! Hash table capacity doubled to {self.capacity}.")
+        renderVisualHashTable(self.buckets, self.capacity, self.size)
+
+# Initialize and run interactive demo
+vip_table = GreenhouseHashTable()
+vip_table.insert("VIP-101", {"flower": "Rose", "qty": 3, "reward": 90})
+vip_table.insert("VIP-102", {"flower": "Daisy", "qty": 2, "reward": 300})
+vip_table.insert("VIP-103", {"flower": "Lotus", "qty": 1, "reward": 150})
+
+pushAction("Executed Topic 6 Hash Table simulation")
+print("Topic 6 Hash Table & Chaining visualization rendered successfully!")
+`
+    },
+
+    7: {
+        title: "Graph Foundations, Adjacency Matrices/Lists, & DFS/BFS",
+        code: `# Topic 7: Graph Foundations, Adjacency Matrices/Lists, & DFS/BFS
+    ==== WRITE YOUR CODE HERE ====
+    `
+    },
+   
+    8: {
+        title: "Sorting Algorithms (Bubble, Insertion, Selection, Quick, & Merge Sort)",
+        code: `# Topic 8: Sorting Algorithms
+import js
+from js import pushAction
+
+def sort_game_inventory():
+    inv = []
+    if hasattr(js, 'harvestInventory') and js.harvestInventory:
+        inv = js.harvestInventory
+    elif hasattr(js, 'playerInventory') and js.playerInventory:
+        inv = js.playerInventory
+    else:
+        # Fallback dummy list kung wala pang laman ang basket
+        inv = [{"name": "Rose", "qty": 5}, {"name": "Daisy", "qty": 12}, {"name": "Tulip", "qty": 3}]
+
+    # I-convert sa Python list
+    items = list(inv)
+    n = len(items)
+
+    def get_qty(item):
+        try:
+            return item.qty if hasattr(item, 'qty') else item['qty']
+        except:
+            return 1
+
+    # Insertion Sort para i-sort ang items pababa (highest quantity muna)
+    for i in range(1, n):
+        key_item = items[i]
+        j = i - 1
+        while j >= 0 and get_qty(items[j]) < get_qty(key_item):
+            items[j + 1] = items[j]
+            j -= 1
+        items[j + 1] = key_item
+
+    if hasattr(js, 'harvestInventory'):
+        js.harvestInventory = items
+    
+    if hasattr(js, 'renderInventory'):
+        try:
+            js.renderInventory()
+        except Exception:
+            pass
+    elif hasattr(js, 'renderVisualSortedInventory'):
+        try:
+            js.renderVisualSortedInventory(items)
+        except Exception:
+            pass
+        
+    pushAction("Sorted Harvest Basket using Insertion Sort")
+    print("Inventory successfully sorted and updated in the game UI!")
+
+sort_game_inventory()
+`
+    },
+   
+    9: {
+        title: "Searching Algorithms (Linear Search vs. Binary Search)",
+        code: `# Topic 9: Searching Algorithms
+    ==== WRITE YOUR CODE HERE ====
+    `
+    },
+   
+    10: {
+        title: "Advanced Strategic Paradigms (Dijkstra's Algorithm & Greedy Patterns)",
+        code: `# Topic 10: Advanced Strategic Paradigms
+        ==== WRITE YOUR CODE HERE ====
+        `
+    },
+   
+    11: {
+        title: "Dynamic Programming (DP), Memoization, & Divide-and-Conquer",
+        code: `# Topic 11: Dynamic Programming (DP)
+        ==== WRITE YOUR CODE HERE ====
+        `
+    }
 };
+
 
 // Safe stubs for removed visualizers
 window.renderPlantTree = function () {};
@@ -582,9 +729,15 @@ function updateClimateQueue() { renderCalendarWidget(); }
 // ---------------------------------------------------------------
 // Pyodide bridge
 // ---------------------------------------------------------------
+let pyLoading = null;
 async function initPyodide() {
-    const consoleEl = document.getElementById("output-console");
     if (pyodideInstance) return;
+    if (!pyLoading) pyLoading = initPyodideOnce().finally(() => { pyLoading = null; });
+    await pyLoading;
+}
+async function initPyodideOnce() {
+    const consoleEl = document.getElementById("output-console");
+    setPyStatus("loading");
     if (consoleEl) consoleEl.innerHTML = `<span class="text-rose-500 font-bold">🌸 Initializing Python engine...</span><br>`;
     try {
         pyodideInstance = await loadPyodide();
@@ -608,8 +761,10 @@ class Console:
 sys.stdout = Console()
         `);
         if (consoleEl) consoleEl.innerHTML = `<span class="text-emerald-600 font-bold">✨ Python environment ready!</span><br>`;
+        setPyStatus("ready");
     } catch (err) {
         if (consoleEl) consoleEl.innerHTML = `<span class="text-rose-500">Failed to load Python: ${err.message}</span>`;
+        pyodideInstance = null; setPyStatus("failed");
     }
 }
 
@@ -636,6 +791,7 @@ function updatePlayerStats() {
     renderCustomerOrders();
     renderStalls();
     refreshModal();
+    if (abook.open) renderAlmanacSpread();
 }
 
 function updateResourceBars() {
@@ -785,6 +941,7 @@ function renderGarden() {
 const gridCols = () => (toolsInventory["Plots"] > 50 ? 10 : toolsInventory["Plots"] > 36 ? 8 : 5);
 
 async function handleTileClick(i, el) {
+    if (!requireCode()) return;
     const plant = gardenGridState[i];
 
     if (plant && plant.damaged) { showToast("Tile damaged by the earthquake! Buy a Repair Kit in the Tool Shop."); return; }
@@ -837,6 +994,8 @@ async function handleTileClick(i, el) {
         if (plant.mutation) { const mk = `${plant.name}|${plant.mutation}`; mutInventory[mk] = (mutInventory[mk] || 0) + 1; }
         else flowerInventory[plant.name] = (flowerInventory[plant.name] || 0) + 1;
         discoverFlower(plant.name);
+        harvestCount[plant.name] = (harvestCount[plant.name] || 0) + 1;
+        if (plant.mutation) mutHarvested[plant.mutation] = (mutHarvested[plant.mutation] || 0) + 1;
         dailyStats.harvestCount++;
         floatPop(`+1 ${flowerImg(plant.name, 20)} ${mutName}${plant.name}`, "gain", el);
         showToast(`Harvested 1x ${mutName}${plant.name} (${FLOWER_CATALOG[plant.name].rarity}) into your inventory! 🧺`);
@@ -947,6 +1106,7 @@ function renderInventoryView() {
 function canFulfill(o) { return consumePlan(o).ok; }
 
 function deliverOrder(orderId) {
+    if (!requireCode()) return;
     const idx = activeCustomerOrders.findIndex(o => o.id === orderId);
     if (idx === -1) return;
     const order = activeCustomerOrders[idx], plan = consumePlan(order);
@@ -965,6 +1125,10 @@ function deliverOrder(orderId) {
     document.getElementById("coins-text").classList.add("bump");
     setTimeout(() => document.getElementById("coins-text").classList.remove("bump"), 500);
     updatePlayerStats();
+
+    if (document.getElementById("view-hash-debug") && !document.getElementById("view-hash-debug").classList.contains("hidden")) {
+    renderHashTableDebug();
+}
 }
 
 function renderCustomerOrders() {
@@ -1433,6 +1597,7 @@ function buildToolModal() {
 // lab, YOUR Python traversal runs the walk. Otherwise JS does it.
 // ---------------------------------------------------------------
 let discovered = {}, claimedRewards = {};
+let harvestCount = {}, mutHarvested = {};
 const almanac = { selected: null, order: [], step: 0, mode: null, src: "", timer: null };
 const ALM_REWARD = { COMMON: 50, UNCOMMON: 120, RARE: 250, LEGENDARY: 500, MYTHICAL: 1000, "Garden Almanac": 3000 };
 const TRAV_TEXT = {
@@ -1494,11 +1659,12 @@ function discoverFlower(name) {
     pushAction(`Discovered ${name} in the Almanac`);
 }
 
-function selectNode(id) { almanac.selected = id; refreshModal(); }
+function selectNode(id) { almanac.selected = id; refreshAlmanac(); }
 
 function claimReward(id) {
     const tree = buildCatalogTree(), node = findNode(tree, id);
-    if (!node || !isComplete(node) || claimedRewards[id]) return;
+    if (!node || claimedRewards[id]) return;
+    if (!isComplete(node)) { showToast("Discover every flower in that collection first! 📖"); return; }
     claimedRewards[id] = true;
     playerCoins += ALM_REWARD[id];
     showToast(`📖 Collection complete! +${ALM_REWARD[id]} coins 🪙`);
@@ -1511,11 +1677,11 @@ function startTraversal(mode) {
     const { order, src } = runTraversal(mode);
     Object.assign(almanac, { mode, order, src, step: 0 });
     pushAction(`Walked the almanac tree (${mode})`);
-    refreshModal();
+    refreshAlmanac();
     almanac.timer = setInterval(() => {
         almanac.step++;
         if (almanac.step >= order.length) { clearInterval(almanac.timer); almanac.timer = null; }
-        refreshModal();
+        refreshAlmanac();
     }, 480);
 }
 
@@ -1583,6 +1749,7 @@ function buildAlmanacModal() {
 
 // ---- Pop-up window plumbing ----
 function openModal(name) {
+    if (!requireCode()) return;
     if (name === "endday" && eodOpen) return;
     openModalName = name;
     document.getElementById("modal").classList.add("open");
@@ -1618,7 +1785,7 @@ function startGameClock() {
     initializeWeatherCalendar();
     if (gameClockInterval) clearInterval(gameClockInterval);
     gameClockInterval = setInterval(() => {
-        if (eodOpen) return;
+        if (eodOpen || !codeRun) return;
         timeMinutes += 15;
         if (timeMinutes >= 1440) { timeMinutes = 360; triggerEndOfDayModal(); }
         updateClockDisplay();
@@ -1787,6 +1954,8 @@ function undoHarvest(pos, snap, wasNew) {
     if ((store[key] || 0) <= 0) return "You already used that flower.";
     store[key]--; if (!store[key]) delete store[key];
     dailyStats.harvestCount = Math.max(0, dailyStats.harvestCount - 1);
+    harvestCount[snap.name] = Math.max(0, (harvestCount[snap.name] || 1) - 1);
+    if (snap.mutation) mutHarvested[snap.mutation] = Math.max(0, (mutHarvested[snap.mutation] || 1) - 1);
     if (wasNew) { delete discovered[snap.name]; playerXP = Math.max(0, playerXP - 20); }
     Object.assign(snap, { timer: null, growing: false, watered: true, stageIndex: MATURE, incoming: false });
     gardenGridState[pos] = snap;   // the very same flower object, so older undo lines still work
@@ -1892,9 +2061,12 @@ async function runPythonCode() {
     consoleEl.innerHTML = `<span class="text-rose-500 font-bold">🌸 Running python script...</span><br>`;
     try {
         await initPyodide();
+        if (!pyodideInstance) throw new Error("The Python engine could not load. Check your internet connection.");
         await pyodideInstance.runPythonAsync(document.getElementById("code-editor").value.trim());
+        unlockGame();
     } catch (err) {
         consoleEl.innerHTML += `<span class="text-rose-500">Error: ${err.message}</span>`;
+        if (!codeRun) setPyStatus("error", err.message.split("\n").filter(Boolean).pop());
     }
 }
 
@@ -1903,6 +2075,7 @@ async function runAllPythonCode() {
     consoleEl.innerHTML = `<span class="text-rose-500 font-bold">🌸 Running all topic codes...</span><br>`;
     try {
         await initPyodide();
+        if (!pyodideInstance) throw new Error("The Python engine could not load. Check your internet connection.");
         for (let key = 1; key <= 5; key++) {
             if (topicTemplates[key] && topicTemplates[key].code) {
                 consoleEl.innerHTML += `<br><span class="text-amber-700 font-bold">--- Running: Topic ${key} (${topicTemplates[key].title}) ---</span><br>`;
@@ -1911,8 +2084,10 @@ async function runAllPythonCode() {
         }
         consoleEl.innerHTML += `<br><span class="text-emerald-600 font-bold">✨ Successfully ran all topics!</span><br>`;
         showToast("All topics have been run! ✨");
+        unlockGame();
     } catch (err) {
         consoleEl.innerHTML += `<span class="text-rose-500">Error: ${err.message}</span>`;
+        if (!codeRun) setPyStatus("error", err.message.split("\n").filter(Boolean).pop());
     }
 }
 
@@ -1922,10 +2097,40 @@ function loadTopic() {
 
 const TABS = ["greenhouse", "inventory", "orders", "code"];
 function switchTab(tab) {
-    TABS.forEach(key => {
-        document.getElementById("view-" + key).classList.toggle("hidden", key !== tab);
-        document.getElementById("tab-" + key).className = "tab-btn" + (key === tab ? " active" : "");
+    const views = {
+        greenhouse: document.getElementById("view-greenhouse"),
+        inventory: document.getElementById("view-inventory"),
+        shop: document.getElementById("view-shop"),
+        orders: document.getElementById("view-orders"),
+        code: document.getElementById("view-code"),
+        hashDebug: document.getElementById("view-hash-debug")
+    };
+    const buttons = {
+        greenhouse: document.getElementById("tab-greenhouse"),
+        inventory: document.getElementById("tab-inventory"),
+        shop: document.getElementById("tab-shop"),
+        orders: document.getElementById("tab-orders"),
+        code: document.getElementById("tab-code"),
+        hashDebug: document.getElementById("tab-hashDebug")
+    };
+
+    Object.keys(views).forEach(key => {
+        if (views[key]) views[key].classList.toggle("hidden", key !== tab);
+        if (buttons[key]) {
+            buttons[key].className = key === tab
+                ? "px-5 py-3 rounded-2xl text-xs font-extrabold btn-pastel transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+                : "px-5 py-3 rounded-2xl text-xs font-extrabold text-rose-700 bg-white/60 hover:bg-white transition-all flex items-center gap-2 cursor-pointer border border-rose-200 shadow-sm";
+        }
     });
+
+    // Awtomatikong i-render ang shop upgrades kapag binuksan ang Shop tab
+    if (tab === 'shop') {
+        renderShopUpgrades();
+    }
+    // Awtomatikong i-render ang Hash Table kapag binuksan ang Hash Inspector
+    if (tab === 'hashDebug') {
+        renderHashTableDebug();
+    }
 }
 
 // ---------------------------------------------------------------
@@ -2503,7 +2708,7 @@ const NPCS = {
             { id: "purpose", icon: "🎯", label: "Purpose of the game", pages: [
                 "This game exists so you can SEE data structures and algorithms at work, not just read about them.",
                 "Your actions are the data. Planting, watering, buying and delivering all go through structures that keep everything in order.",
-                "Open the Student Code Editor and run a topic: your own Python code starts driving the game! Topics 1 to 5 are ready, and more chapters will bloom later.",
+                "Open the Student Code Editor and run a topic: your own Python code starts driving the game! Topics 1 to 5 are ready, and more chapters will bloom later. The garden stays asleep until you run your code once.",
                 "Make a mistake and the garden shows it. If a grid formula uses the wrong width, flowers pop up on the wrong tiles! Spot it, fix it, and you truly understand it."] },
             { id: "events", icon: "🦋", label: "Events & mutations", pages: [
                 "On special days my friends visit: the Butterfly, Rainbow and Cotton Candy events! They are rolled at random for every player, and you can spot them on the Bloom Calendar.",
@@ -2513,10 +2718,11 @@ const NPCS = {
         ]
     },
     dwarf: {
-        name: "Florian", role: "Flower Dwarf", side: "right",
+        name: "Mossy", role: "Flower Dwarf", side: "right",
         menu: "Well met, gardener! I'm Mossy. Ask away, I know every corner of this greenhouse.",
         topics: [
             { id: "play", icon: "🌱", label: "How to play", pages: [
+                "First things first: open the Student Code Editor and press Run Python Code or Run All Topics. That wakes up the whole garden!",
                 "You start with 500 coins, 30 water, and 3 Rose plus 3 Sakura seeds. Pick a seed in the Seed Bag, then hover an empty bed to preview the bloom.",
                 "Click the empty bed to plant. Click the plant to water it (costs 1 water). Each flower grows through 4 stages, and it needs water at every stage.",
                 "When it glows ✨ it is ready: click it to harvest. The flower goes into your Harvest Basket, ready for customers.",
@@ -2549,7 +2755,7 @@ let npcOpen = null, npcTopic = null, npcPage = 0, npcTimer = null, npcFull = "";
 const npcMet = {};
 
 const npcArt = (id, cls = "") => id === "fairy"
-    ? `<div class="npc-art ${cls}"><img class="wing" src="assets/butterfly-4.png" alt="" onerror="this.remove()"><img class="body" src="npc-fairy.png" alt="" draggable="false"></div>`
+    ? `<div class="npc-art ${cls}"><img class="wing" src="butterfly-4.png" alt="" onerror="this.remove()"><img class="body" src="npc-fairy.png" alt="" draggable="false"></div>`
     : `<div class="npc-art ${cls}"><img class="body" src="npc-dwarf.png" alt="" draggable="false"><img class="hatflower" src="rose.png" alt="" onerror="this.remove()"></div>`;
 
 function mountNPCs() {
@@ -2653,6 +2859,344 @@ function closeNPC() {
 }
 
 // ---------------------------------------------------------------
+// Flower Almanac as a pop-up BOOK. Click the stall and it pops up; flip the pages with the
+// arrows, the page corners, the tabs or the arrow keys. The tree (Topic 4) sits on its own spread.
+//   Spread 1: title page + contents | 2: the Almanac Tree | 3-7: one tier per spread | 8: collections & mutations
+// ---------------------------------------------------------------
+const abook = { open: false, spread: 0, flipping: false, pop: false };
+const AL_COUNT = 8;
+const AL_TABS = [["Contents", 0, 0, "#f08cb0"], ["Tree", 1, 1, "#8fcf9f"], ["Flowers", 2, 6, "#9bbdf0"], ["Rewards", 7, 7, "#f0b84f"]];
+const cap = t => t[0] + t.slice(1).toLowerCase();
+const FLOWER_LORE = {
+    "Rose": "The classic bloom. Sweet, steady, and loved by every customer.",
+    "Sakura": "Soft pink petals that drift down like gentle spring snow.",
+    "Lotus": "Rises clean and bright out of the stillest water.",
+    "Hibiscus": "A bold tropical flower with petals like little sunsets.",
+    "Cherry Blossom": "Fleeting and precious. The whole garden pauses when it blooms.",
+    "Sunflower": "Always turns its face to the sun. Such a happy flower!",
+    "Daisy": "Humble yet legendary: white petals around a golden heart.",
+    "Morning Glory": "Opens with the dawn, spiralling in dreamy blues and violets.",
+    "Pink Cosmos": "Delicate and dancing in the breeze. Rare enough to feel like magic.",
+    "Mexican Aster": "A mythical star-shaped bloom said to grant wishes."
+};
+
+function mountAlmanacBook() {
+    const m = document.createElement("div");
+    m.id = "abook-modal"; m.className = "abook-modal";
+    m.innerHTML = `<div class="abook-backdrop" onclick="closeAlmanacBook()"></div>
+        <div class="abook-stage" role="dialog" aria-label="Flower Almanac">
+            <div class="abook-tabs" id="abook-tabs"></div>
+            <button class="abook-close" onclick="closeAlmanacBook()" aria-label="Close the almanac">✕</button>
+            <div class="abook">
+                <div class="abook-pages" id="abook-pages">
+                    <div class="apg left" id="apg-left" onclick="alCorner(event,-1)"></div>
+                    <div class="aspine"></div>
+                    <div class="apg right" id="apg-right" onclick="alCorner(event,1)"></div>
+                    <div class="aleaf" id="aleaf"><div class="aleaf-face front apg" id="aleaf-front"></div><div class="aleaf-face back apg" id="aleaf-back"></div></div>
+                </div>
+            </div>
+            <div class="abook-nav">
+                <button class="nv" id="abook-prev" onclick="flipAlmanac(-1)" aria-label="Previous page">◀</button>
+                <span class="lbl" id="abook-label"></span>
+                <button class="nv" id="abook-next" onclick="flipAlmanac(1)" aria-label="Next page">▶</button>
+            </div>
+        </div>`;
+    document.body.appendChild(m);
+    document.addEventListener("keydown", e => {
+        if (!abook.open) return;
+        if (e.key === "Escape") closeAlmanacBook();
+        else if (e.key === "ArrowRight") flipAlmanac(1);
+        else if (e.key === "ArrowLeft") flipAlmanac(-1);
+    });
+}
+
+function openAlmanacBook() {
+    if (!requireCode()) return;
+    if (eodOpen) return;
+    abook.open = true; abook.pop = true; abook.flipping = false;
+    document.getElementById("aleaf").className = "aleaf";
+    document.getElementById("abook-modal").classList.add("open");
+    renderAlmanacSpread();
+    setTimeout(() => { abook.pop = false; }, 1800);
+}
+
+function closeAlmanacBook() {
+    abook.open = false;
+    if (almanac.timer) { clearInterval(almanac.timer); almanac.timer = null; }
+    const m = document.getElementById("abook-modal"); if (m) m.classList.remove("open");
+}
+
+// Re-draw whatever the almanac is showing (book or old pop-up)
+function refreshAlmanac() { if (abook.open) renderAlmanacSpread(); else refreshModal(); }
+
+// Clicking the OUTER edge of a page turns it (so reading and tapping things inside never flips by accident)
+function alCorner(e, dir) {
+    if (e.target.closest && e.target.closest("button,[onclick],svg,a,input")) return;
+    const r = e.currentTarget.getBoundingClientRect(), x = (e.clientX - r.left) / r.width;
+    const wide = document.getElementById("abook-pages").classList.contains("wide");
+    if (wide && x > 0.82) dir = 1; else if (wide && x >= 0.18) return;
+    else if (!wide && (dir > 0 ? x < 0.8 : x > 0.2)) return;
+    flipAlmanac(dir);
+}
+
+function alFlowerPage(name) {
+    const d = FLOWER_CATALOG[name], known = !!discovered[name], t = TIERS[d.rarity], q = v => (known ? v : "???");
+    return `<div class="fpage tc-${d.rarity} ${known ? "" : "unknown"}">
+        <span class="rar rar-${d.rarity}">${d.rarity}</span>
+        <div class="frame">${flowerImg(name, 120)}</div>
+        <h3 class="ap-name">${q(name)}</h3>
+        <div class="path">Almanac → ${cap(d.rarity)} → ${q(name)}</div>
+        <div class="facts">
+            <div class="fact">🪙 Sells for ${q(d.price + "c")}</div><div class="fact">🌰 Seed ${q(seedCost(name) + "c")}</div>
+            <div class="fact">⏳ Blooms in ~${q(t.sec * 4 + "s")}</div><div class="fact">⭐ ${q(d.xp + " XP")} each</div>
+            <div class="fact">🧺 Harvested ${harvestCount[name] || 0}x</div><div class="fact">${unlockedTiers[d.rarity] ? "🌱 Tier unlocked" : "🔒 Tier locked"}</div>
+        </div>
+        <p class="note">${known ? FLOWER_LORE[name] : "Harvest this flower once to reveal its page."}</p></div>`;
+}
+
+function alCover() {
+    const total = Object.keys(FLOWER_CATALOG).length, n = discoveredCount(), pop = abook.pop ? "pop" : "";
+    const flowers = [["Sunflower", 6, 0.15, 84, 70], ["Rose", 28, 0.3, 74, 52], ["Cherry Blossom", 50, 0.45, 88, 80], ["Lotus", 72, 0.6, 76, 56]]
+        .map(([f, x, d, size, stem]) => `<div class="popflower ${pop}" style="left:${x}%;--d:${d}s">${flowerImg(f, size)}<span class="stem" style="height:${stem}px"></span></div>`).join("");
+    const toc = [["The Almanac Tree", 1, "🌳"], ...Object.keys(TIERS).map((t, i) => [`${cap(t)} blooms`, i + 2, TIERS[t].icon]), ["Collections & mutations", 7, "🎁"]]
+        .map(([label, sp, ic]) => `<div class="toc-row" onclick="flipAlmanacTo(${sp})"><span>${ic} ${label}</span><i class="dots"></i><b>${sp * 2 + 1}</b></div>`).join("");
+    return {
+        left: `<div class="cover-pg"><div class="ap-kicker">A FIELD GUIDE TO EVERY BLOOM</div><h2 class="ap-title big">Flower Almanac</h2>
+            <div class="pop-scene"><img class="pop-bf" src="assets/butterfly-2.png" alt="" onerror="this.remove()"><div class="pop-ground"></div>${flowers}</div>
+            <p class="ap-sub" style="margin-top:8px">Harvest every flower to fill the pages ♡</p></div>`,
+        right: `<h2 class="ap-title">Contents</h2><div class="toc">${toc}</div>
+            <div class="prog"><div class="flex justify-between text-xs font-bold mb-1"><span>📖 Discovered</span><span>${n} / ${total}</span></div>
+            <div class="meter" style="--m1:#ffd3e0;--m2:#f6a6c1"><i style="width:${(n / total) * 100}%"></i></div>
+            <p class="note" style="margin-top:8px">Tap a line, a tab, an arrow or the outer edge of a page to turn it.</p></div>`
+    };
+}
+
+function alRewards() {
+    const tree = buildCatalogTree(), total = Object.keys(FLOWER_CATALOG).length;
+    const row = (node, label, icon, have, count) => {
+        const done = isComplete(node), claimed = claimedRewards[node.id];
+        return `<div class="rw-row ${done ? "done" : ""}"><span class="rw-ic">${icon}</span><div class="flex-1"><b>${label}</b>
+            <div class="meter" style="--m1:#ffd3e0;--m2:#f6a6c1"><i style="width:${(have / count) * 100}%"></i></div><small>${have}/${count} discovered</small></div>
+            ${claimed ? '<span class="rw-ok">✓ Claimed</span>' : `<button class="btn-pastel btn-mint px-3 py-1.5 text-[11px] ${done ? "" : "btn-disabled"}" onclick="claimReward('${node.id}')">${done ? "Claim" : "Reward"} ${ALM_REWARD[node.id]}c</button>`}</div>`;
+    };
+    const rows = tree.children.map(t => row(t, `${t.label} tier`, t.icon, t.children.filter(f => discovered[f.id]).length, t.children.length)).join("") + row(tree, "The whole Almanac", "📖", discoveredCount(), total);
+    const events = Object.entries(EVENTS).map(([k, e]) => `<div class="mg-card" style="--ec:${e.color}"><b>${e.icon} ${e.name}</b>
+        ${EVENT_MUT[k].map(([m, c]) => `<div class="mg-line"><span>${MUTATIONS[m].icon} ${MUTATIONS[m].name}</span><em>x${MUTATIONS[m].mult}</em><small>${Math.round(c * 100)}% · harvested ${mutHarvested[m] || 0}x</small></div>`).join("")}</div>`).join("");
+    return {
+        left: `<h2 class="ap-title">Collections</h2><p class="ap-sub">Discover every flower of a tier to claim its reward.</p>${rows}`,
+        right: `<h2 class="ap-title">Mutation guide</h2><p class="ap-sub">Events mutate random flowers. A 100c flower that becomes x3.5 sells for 350c, and orders use mutated flowers first.</p>${events}`
+    };
+}
+
+function alBuild(s) {
+    if (s === 0) return alCover();
+    if (s === 1) {
+        const m = buildAlmanacModal();
+        return { wide: true, left: `<h2 class="ap-title">The Almanac Tree</h2><p class="ap-sub">Almanac → Tiers → Flowers · tap a node, or pick a traversal to walk the tree</p>${m.html}` };
+    }
+    if (s >= 2 && s <= 6) {
+        const tier = Object.keys(TIERS)[s - 2], names = Object.keys(FLOWER_CATALOG).filter(n => FLOWER_CATALOG[n].rarity === tier);
+        return { left: alFlowerPage(names[0]), right: alFlowerPage(names[1]) };
+    }
+    return alRewards();
+}
+
+function renderAlmanacSpread() {
+    if (!abook.open || abook.flipping) return;
+    const sp = alBuild(abook.spread), pages = document.getElementById("abook-pages");
+    pages.classList.toggle("wide", !!sp.wide);
+    const L = document.getElementById("apg-left"), Rt = document.getElementById("apg-right");
+    const keepL = L.scrollTop, keepR = Rt.scrollTop;
+    L.innerHTML = sp.left; Rt.innerHTML = sp.right || "";
+    L.scrollTop = keepL; Rt.scrollTop = keepR;
+    document.getElementById("abook-label").textContent = sp.wide ? `Pages ${abook.spread * 2 + 1}-${abook.spread * 2 + 2} · The Almanac Tree` : `Pages ${abook.spread * 2 + 1}-${abook.spread * 2 + 2} of ${AL_COUNT * 2}`;
+    document.getElementById("abook-prev").disabled = abook.spread <= 0;
+    document.getElementById("abook-next").disabled = abook.spread >= AL_COUNT - 1;
+    document.getElementById("abook-tabs").innerHTML = AL_TABS.map(([label, a, b, c]) => `<button class="abook-tab ${abook.spread >= a && abook.spread <= b ? "active" : ""}" style="--tc:${c}" onclick="flipAlmanacTo(${a})">${label}</button>`).join("");
+}
+
+function flipAlmanac(dir) { flipAlmanacTo(Math.max(0, Math.min(AL_COUNT - 1, abook.spread + dir))); }
+
+function flipAlmanacTo(target) {
+    if (abook.flipping || target === abook.spread || target < 0 || target >= AL_COUNT) return;
+    const cur = alBuild(abook.spread), nxt = alBuild(target), dir = target > abook.spread ? 1 : -1;
+    const pages = document.getElementById("abook-pages"), L = document.getElementById("apg-left"), Rt = document.getElementById("apg-right");
+    const leaf = document.getElementById("aleaf"), front = document.getElementById("aleaf-front"), back = document.getElementById("aleaf-back");
+    abook.flipping = true;
+    if (cur.wide || nxt.wide) {              // the tree spread covers both pages: turn it with a soft page swap
+        pages.classList.add("swap");
+        setTimeout(() => { abook.spread = target; abook.flipping = false; renderAlmanacSpread(); }, 260);
+        setTimeout(() => pages.classList.remove("swap"), 560);
+        return;
+    }
+    if (dir > 0) {
+        front.innerHTML = Rt.innerHTML; back.innerHTML = nxt.left; Rt.innerHTML = nxt.right;
+        front.className = "aleaf-face front apg right"; back.className = "aleaf-face back apg left"; leaf.className = "aleaf next";
+    } else {
+        front.innerHTML = L.innerHTML; back.innerHTML = nxt.right; L.innerHTML = nxt.left;
+        front.className = "aleaf-face front apg left"; back.className = "aleaf-face back apg right"; leaf.className = "aleaf prev";
+    }
+    setTimeout(() => { abook.spread = target; leaf.className = "aleaf"; abook.flipping = false; renderAlmanacSpread(); }, 830);
+}
+
+// ---------------------------------------------------------------
+// Code gate: the garden stays asleep until the student runs code in the Student Code Editor
+// (Run Python Code or Run All Topics). A cute floating reminder waits on the left until then.
+// ---------------------------------------------------------------
+let codeRun = false, reminderMin = false, pyFailed = false;
+
+function requireCode() {
+    if (codeRun) return true;
+    showToast("🔒 The garden is asleep! Run your code in the Student Code Editor first.");
+    nudgeReminder();
+    return false;
+}
+
+function mountCodeReminder() {
+    document.body.classList.add("locked");
+    const card = document.createElement("div");
+    card.id = "code-reminder"; card.className = "code-reminder glass-panel"; card.setAttribute("role", "note");
+    card.innerHTML = `<button class="cr-min" onclick="toggleReminder(true)" aria-label="Minimize the reminder" title="Minimize">–</button>
+        <div class="cr-sleep"><img class="cr-bf" src="assets/butterfly-6.png" alt="" onerror="this.remove()">
+            <img class="cr-flower" src="rose.png" alt="" onerror="this.replaceWith('🌷')"><span class="zz z1">z</span><span class="zz z2">Z</span><span class="zz z3">z</span></div>
+        <div class="cr-ribbon">✿ the garden is sleeping ✿</div>
+        <h3 class="cr-title" id="cr-title">Wake up the garden!</h3>
+        <p class="cr-text" id="cr-text">Before anything in the game works, run your code in the <b>Student Code Editor</b>.</p>
+        <ol class="cr-steps" id="cr-steps">
+            <li><span>1</span><div>Open the <b>Student Code Editor</b> tab</div></li>
+            <li><span>2</span><div>Press <b>Run Python Code</b> or <b>Run All Topics</b></div></li>
+            <li><span>3</span><div>Watch the garden bloom 🌸</div></li>
+        </ol>
+        <div class="cr-status" id="cr-status">⏳ Python is warming up...</div>
+        <button class="btn-pastel cr-go" id="cr-go" onclick="goToCodeEditor()">✨ Take me to the Code Editor</button>
+        <button class="cr-skip" id="cr-skip" onclick="unlockGame(true)" style="display:none">Python won't load? Play without it</button>`;
+    document.body.appendChild(card);
+    const pill = document.createElement("button");
+    pill.id = "code-pill"; pill.className = "code-pill"; pill.onclick = () => toggleReminder(false);
+    pill.innerHTML = "🔒 <span>Run your code first</span>";
+    document.body.appendChild(pill);
+}
+
+function toggleReminder(min) {
+    reminderMin = min;
+    const card = document.getElementById("code-reminder");
+    if (card) card.classList.toggle("min", min);
+    document.body.classList.toggle("rem-min", min);
+}
+
+function nudgeReminder() {
+    const card = document.getElementById("code-reminder");
+    if (!card) return;
+    if (reminderMin) toggleReminder(false);
+    card.classList.remove("shake");
+    void card.offsetWidth;
+    card.classList.add("shake");
+    setTimeout(() => card.classList.remove("shake"), 700);
+}
+
+function goToCodeEditor() {
+    switchTab("code");
+    const v = document.getElementById("view-code");
+    if (v && v.scrollIntoView) v.scrollIntoView({ behavior: "smooth", block: "center" });
+    ["run-topic-btn", "run-all-btn"].forEach(id => {
+        const b = document.getElementById(id);
+        if (b) { b.classList.add("pulse-run"); setTimeout(() => b.classList.remove("pulse-run"), 7000); }
+    });
+}
+
+function setPyStatus(state, msg) {
+    const el = document.getElementById("cr-status");
+    if (!el) return;
+    const short = (msg || "fix it and run again").slice(0, 90);
+    const map = {
+        loading: ["⏳ Python is warming up...", ""], ready: ["✅ Python is ready. Press a Run button!", "ok"],
+        failed: ["⚠️ Python couldn't load. Check your internet connection.", "bad"], error: [`❌ Your code has an error: ${short}`, "bad"]
+    };
+    const [text, cls] = map[state];
+    el.textContent = text; el.className = "cr-status " + cls;
+    pyFailed = state === "failed";
+    const skip = document.getElementById("cr-skip");
+    if (skip) skip.style.display = pyFailed ? "" : "none";
+}
+
+function unlockGame(skipped) {
+    if (codeRun) return;
+    codeRun = true;
+    document.body.classList.remove("locked", "rem-min");
+    const card = document.getElementById("code-reminder");
+    if (card) {
+        card.classList.remove("min"); card.classList.add("awake");
+        document.getElementById("cr-title").textContent = "The garden is awake! 🌸";
+        document.getElementById("cr-text").textContent = skipped ? "Playing without Python for now. Have fun growing!" : "Your code ran. Have fun growing!";
+        try { const r = card.getBoundingClientRect(); spawnBurst(r.left + r.width / 2, r.top + 60, "butterfly"); setTimeout(() => spawnBurst(r.left + r.width / 2, r.top + 40, "rainbow"), 250); } catch (e) {}
+        setTimeout(() => { card.remove(); const p = document.getElementById("code-pill"); if (p) p.remove(); }, 2700);
+    }
+    const p = document.getElementById("code-pill"); if (p) p.remove();
+    showToast(skipped ? "🌸 The garden is awake (without Python)." : "🌸 Your code ran! The garden is awake. Have fun!");
+    pushAction(skipped ? "Started without running code" : "Ran the code lab: the garden woke up");
+}
+
+function renderHashTableDebug() {
+    const container = document.getElementById("hash-buckets-container");
+    if (!container) return;
+    container.innerHTML = "";
+
+    // Update summary counters
+    const capacityEl = document.getElementById("hash-capacity");
+    const countEl = document.getElementById("hash-count");
+    const loadFactorEl = document.getElementById("hash-load-factor");
+
+    if (capacityEl) capacityEl.innerText = vipOrderTable.size;
+    if (countEl) countEl.innerText = vipOrderTable.count;
+    if (loadFactorEl) loadFactorEl.innerText = (vipOrderTable.count / vipOrderTable.size).toFixed(2);
+
+    vipOrderTable.buckets.forEach((bucket, index) => {
+        let bucketDiv = document.createElement("div");
+        bucketDiv.className = "bg-white/90 p-3.5 rounded-2xl border border-rose-200/80 shadow-sm flex flex-col gap-2";
+        
+        let chainHtml = bucket.length === 0 
+            ? `<span class="text-[11px] text-gray-400 italic px-1">Empty Slot</span>` 
+            : bucket.map(item => {
+                const order = item.orderDetails;
+                // Handle both single orders and bouquets correctly
+                let displayName = "";
+                let displayQty = "";
+
+                if (order.type === "single") {
+                    displayName = order.flowerName || "Flower";
+                    displayQty = `${order.quantity || 1}x`;
+                } else if (order.type === "bouquet") {
+                    displayName = "Custom Bouquet";
+                    displayQty = order.items ? `${Object.keys(order.items).length} types` : "Bouquet";
+                } else {
+                    displayName = order.flower || "Order";
+                    displayQty = order.qty ? `${order.qty}x` : "1x";
+                }
+
+                return `
+                <div class="bg-rose-50/90 border border-rose-200 px-3 py-1.5 rounded-xl flex justify-between items-center text-xs font-bold text-rose-900 shadow-xs">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-amber-500">🔑</span>
+                        <span><b>${item.customerID}</b></span>
+                        <span class="text-[10px] bg-rose-200/60 text-rose-800 px-1.5 py-0.5 rounded-md font-semibold">${displayName} (${displayQty})</span>
+                    </div>
+                    <span class="text-amber-700 font-extrabold text-[11px]">+${order.rewardCoins || 0} Coins</span>
+                </div>
+                `;
+              }).join("");
+
+        bucketDiv.innerHTML = `
+            <div class="flex justify-between items-center text-xs font-extrabold text-rose-900 border-b border-rose-100 pb-1.5">
+                <span>Bucket Index [${index}]</span>
+                <span class="text-[10px] bg-amber-100 border border-amber-300/60 text-amber-900 px-2 py-0.5 rounded-full font-bold">Chaining: ${bucket.length} items</span>
+            </div>
+            <div class="flex flex-col gap-1.5 pt-0.5">${chainHtml}</div>
+        `;
+        container.appendChild(bucketDiv);
+    });
+}
+
+// ---------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------
 window.onload = () => {
@@ -2691,6 +3235,106 @@ window.onload = () => {
     loadTopic();
 
     mountNPCs();
+    mountAlmanacBook();
+    mountCodeReminder();
     switchTab("greenhouse");
     initPyodide().catch(() => {});
+};
+
+// Visual Hash Table Renderer for Topic 6 (Floral Theme Alignment)
+window.renderVisualHashTable = function(buckets, capacity, size) {
+    const consoleEl = document.getElementById("output-console");
+    if (!consoleEl) return;
+
+    let loadFactor = (size / capacity).toFixed(2);
+    let html = `
+        <div class="mt-3 p-4 bg-white/90 border-2 border-rose-200 rounded-2xl shadow-sm space-y-3">
+            <div class="flex items-center justify-between border-b border-rose-100 pb-2">
+                <span class="font-extrabold text-rose-900 text-xs flex items-center gap-1.5">🌸 Topic 6 Live Hash Inspector</span>
+                <span class="text-[10px] bg-rose-100 text-rose-700 font-bold px-2 py-0.5 rounded-full">Capacity: ${capacity} | Load: ${loadFactor}</span>
+            </div>
+            <div class="grid grid-cols-1 gap-2 max-h-48 overflow-auto">
+    `;
+
+    buckets.forEach((bucket, idx) => {
+        let chainItems = bucket.length === 0 
+            ? `<span class="text-[11px] text-gray-400 italic">Empty Slot</span>`
+            : bucket.map(item => `
+                <div class="bg-rose-50/80 border border-rose-200 px-2.5 py-1 rounded-xl flex justify-between items-center text-[11px] text-rose-900 font-bold">
+                    <span>🔑 ${item[0]}</span>
+                    <span class="text-emerald-700 font-semibold">${item[1].flower} (${item[1].qty}x)</span>
+                </div>
+              `).join("");
+
+        html += `
+            <div class="bg-amber-50/40 border border-amber-200/60 p-2.5 rounded-xl flex flex-col gap-1.5">
+                <div class="flex justify-between items-center text-[11px] font-extrabold text-amber-900">
+                    <span>Bucket Index [${idx}]</span>
+                    <span class="text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full">Chaining: ${bucket.length}</span>
+                </div>
+                <div class="flex flex-wrap gap-1.5">${chainItems}</div>
+            </div>
+        `;
+    });
+
+    html += `</div></div>`;
+    consoleEl.innerHTML += html;
+};
+
+// Cute Pastel UI Renderer for Topic 8 (Sorted Inventory)
+window.renderVisualSortedInventory = function(sortedItems) {
+    const consoleEl = document.getElementById("output-console");
+    if (!consoleEl) return;
+
+    if (!sortedItems || sortedItems.length === 0) {
+        consoleEl.innerHTML += `
+            <div class="mt-3 p-4 bg-rose-50/80 border-2 border-rose-200 rounded-2xl text-center text-xs text-rose-700 font-bold">
+                🌸 Your flower inventory is currently empty! Harvest some flowers first to see the sorted list.
+            </div>
+        `;
+        return;
+    }
+
+    let cardsHtml = sortedItems.map((item, index) => {
+        const flowerName = item[0];
+        const count = item[1];
+        
+        // Cute rank badges
+        let rankBadge = `<span class="bg-rose-100 text-rose-700 text-[10px] px-2 py-0.5 rounded-full font-bold">Rank #${index + 1}</span>`;
+        if (index === 0) rankBadge = `<span class="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded-full font-extrabold border border-amber-300">👑 Top Stock</span>`;
+
+        return `
+            <div class="bg-white/90 border border-rose-200 p-3 rounded-xl flex items-center justify-between shadow-xs hover:border-rose-300 transition-all">
+                <div class="flex items-center gap-2.5">
+                    <span class="text-base">🌺</span>
+                    <div>
+                        <div class="text-xs font-extrabold text-rose-900">${flowerName}</div>
+                        ${rankBadge}
+                    </div>
+                </div>
+                <div class="bg-rose-50 border border-rose-100 px-3 py-1 rounded-lg text-right">
+                    <span class="text-xs font-black text-rose-800">${count}</span>
+                    <span class="text-[10px] text-rose-600 block -mt-1 font-semibold">in stock</span>
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    let containerHtml = `
+        <div class="mt-3 p-4 bg-white/90 border-2 border-rose-200 rounded-2xl shadow-sm space-y-3">
+            <div class="flex items-center justify-between border-b border-rose-100 pb-2">
+                <span class="font-extrabold text-rose-900 text-xs flex items-center gap-1.5">
+                    🌸 Sorted Inventory Dashboard (Insertion Sort)
+                </span>
+                <span class="text-[10px] bg-rose-100 text-rose-700 font-bold px-2.5 py-0.5 rounded-full">
+                    Total Types: ${sortedItems.length}
+                </span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-auto pr-1">
+                ${cardsHtml}
+            </div>
+        </div>
+    `;
+
+    consoleEl.innerHTML += containerHtml;
 };
