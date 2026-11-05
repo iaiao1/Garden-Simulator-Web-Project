@@ -85,12 +85,18 @@ const orderType = o => (Object.keys(o.items).length > 1 ? "bouquet" : "single");
 
 let activeCustomerOrders = [
     { id: 1, items: { "Rose": 2 } },
-    { id: 2, items: { "Rose": 2, "Sakura": 1 } },
+    { id: 2, items: { "Rose": 2, "Sakura": 1 }, vip: true, cid: "VIP-1001" },
     { id: 3, items: { "Sakura": 1 } },
-    { id: 4, items: { "Sakura": 2, "Rose": 1 } }
+    { id: 4, items: { "Sakura": 2, "Rose": 1 }, vip: true, cid: "VIP-1002" }
 ];
 
+// 3 in 10 new customers are VIPs with a unique Customer ID
 function generateNewOrder() {
+    const o = generateBaseOrder();
+    if (Math.random() < 0.3) { o.vip = true; o.cid = nextVipId(); }
+    return o;
+}
+function generateBaseOrder() {
     const pool = Object.keys(FLOWER_CATALOG).filter(isUnlocked);
     const pick = () => pool[Math.floor(Math.random() * pool.length)];
     const id = Date.now() + Math.random();
@@ -184,16 +190,11 @@ print("Climate Queue (FIFO) successfully applied to Weather Calendar!")
     3: {
         title: "Static/Dynamic Arrays, 2D Lists, & Memory Structures",
         code: `# Topic 3: Static/Dynamic Arrays, 2D Lists, & Memory Structures
-from js import addPlantToGrid, pushAction
+from js import addPlantToGrid, getGridCols
 
-# Safe fallback import for getGridCols to prevent ImportError
-try:
-    from js import getGridCols
-except ImportError:
-    def getGridCols():
-        return 10
 
 GRID_SIZE = 10
+
 
 class GardenGrid:
     def __init__(self, size=GRID_SIZE):
@@ -201,21 +202,23 @@ class GardenGrid:
         self.grid = [[None for _ in range(size)] for _ in range(size)]
 
     def plant_at(self, row, col, crop_name):
-        cols = getGridCols()
+        cols = getGridCols()                 # how many columns the greenhouse has right now
         if 0 <= row < self.size and 0 <= col < cols:
             self.grid[row][col] = crop_name
-            pos = (row * cols) + col
+            pos = (row * cols) + col         # row-major index: use the REAL width, not GRID_SIZE
             addPlantToGrid(pos, crop_name)
-            pushAction(f"Planted {crop_name} at Grid ({row}, {col})")
             return True
         return False
 
+
 garden = GardenGrid()
+
 
 def plant_crop(row, col, crop_name):
     return garden.plant_at(row, col, crop_name)
 
-print("Topic 3 2D List Garden Grid ready with dynamic column support!")
+
+print("Topic 3 2D List Garden Grid ready!")
 `
     },
     4: {
@@ -527,157 +530,214 @@ print("Tap a day in the Bloom Calendar to see your search path.")
 print("During a special event, flower mutations now run through garden_mutate()!")
 `
     },
-
     6: {
         title: "Hash Tables, Collisions, & Rehashing",
         code: `# Topic 6: Hash Tables, Collisions, & Rehashing
-from js import renderVisualHashTable, pushAction
+# The game's VIP Desk (customer lookup) and Greenhouse Memory (plant data) are hash tables.
+# They ask YOUR hash_key() which bucket a key belongs to, and they handle collisions with chaining.
+# Run this topic and the game starts using your function (it must return 0 .. capacity - 1).
+import json
+from js import pushAction
 
-class GreenhouseHashTable:
-    def __init__(self, capacity=5):
+
+def hash_key(key, capacity):
+    # polynomial rolling hash: h = h * 31 + the character code
+    h = 0
+    for ch in str(key):
+        h = (h * 31 + ord(ch)) % 1000000007
+    return h % capacity
+
+
+class HashTable:
+    # chaining: every bucket is a list, so keys that land in the same bucket simply share it
+    def __init__(self, capacity=8, max_load=0.75):
         self.capacity = capacity
+        self.max_load = max_load
         self.size = 0
         self.buckets = [[] for _ in range(capacity)]
+        self.rehash_count = 0
 
-    def _hash(self, key):
-        return sum(ord(char) for char in str(key)) % self.capacity
+    def load_factor(self):
+        return self.size / self.capacity
 
-    def insert(self, key, value):
-        index = self._hash(key)
-        bucket = self.buckets[index]
-        
-        # Check for existing key and update
-        for item in bucket:
-            if item[0] == key:
-                item[1] = value
-                renderVisualHashTable(self.buckets, self.capacity, self.size)
+    def put(self, key, value):
+        bucket = self.buckets[hash_key(key, self.capacity)]
+        for pair in bucket:
+            if pair[0] == key:
+                pair[1] = value
                 return
-        
         bucket.append([key, value])
         self.size += 1
-        print(f"Inserted VIP Order [{key}] into Hash Bucket {index} via Chaining.")
-
-        # Check load factor (> 0.75) to trigger dynamic rehashing
-        if self.size / self.capacity > 0.75:
+        if self.load_factor() > self.max_load:
             self.rehash()
-        else:
-            renderVisualHashTable(self.buckets, self.capacity, self.size)
 
-    def search(self, key):
-        index = self._hash(key)
-        for item in self.buckets[index]:
-            if item[0] == key:
-                return item[1]
+    def get(self, key):
+        for k, v in self.buckets[hash_key(key, self.capacity)]:
+            if k == key:
+                return v
         return None
 
+    def remove(self, key):
+        bucket = self.buckets[hash_key(key, self.capacity)]
+        for i, pair in enumerate(bucket):
+            if pair[0] == key:
+                bucket.pop(i)
+                self.size -= 1
+                return True
+        return False
+
     def rehash(self):
-        old_buckets = self.buckets
+        # too full: double the capacity, then move every pair to its NEW bucket
+        old_pairs = [pair for bucket in self.buckets for pair in bucket]
         self.capacity *= 2
-        self.size = 0
         self.buckets = [[] for _ in range(self.capacity)]
-        
-        for bucket in old_buckets:
-            for key, value in bucket:
-                self.insert(key, value)
-        print(f"Rehashing triggered! Hash table capacity doubled to {self.capacity}.")
-        renderVisualHashTable(self.buckets, self.capacity, self.size)
+        for k, v in old_pairs:
+            self.buckets[hash_key(k, self.capacity)].append([k, v])
+        self.rehash_count += 1
 
-# Initialize and run interactive demo
-vip_table = GreenhouseHashTable()
-vip_table.insert("VIP-101", {"flower": "Rose", "qty": 3, "reward": 90})
-vip_table.insert("VIP-102", {"flower": "Daisy", "qty": 2, "reward": 300})
-vip_table.insert("VIP-103", {"flower": "Lotus", "qty": 1, "reward": 150})
 
-pushAction("Executed Topic 6 Hash Table simulation")
-print("Topic 6 Hash Table & Chaining visualization rendered successfully!")
+# A little demo with flower codes
+codes = HashTable(capacity=4)
+for code in ["ROS", "SAK", "LOT", "HIB", "SUN"]:
+    codes.put(code, code.lower())
+print(f"Flower codes: {codes.size} stored, capacity {codes.capacity}, load {codes.load_factor():.2f}, rehashes {codes.rehash_count}")
+print("Buckets (collisions share a chain):", [[k for k, _ in b] for b in codes.buckets])
+
+pushAction("Hash table ready: the game now uses your hash_key()")
+print("Topic 6 ready! Look at the VIP Desk (Customer Orders) and the Greenhouse Memory (Inventory & Tools).")
 `
     },
-
-    7: {
-        title: "Graph Foundations, Adjacency Matrices/Lists, & DFS/BFS",
-        code: `# Topic 7: Graph Foundations, Adjacency Matrices/Lists, & DFS/BFS
-    ==== WRITE YOUR CODE HERE ====
-    `
-    },
-   
+    7: { title: "Graph Foundations, Adjacency Matrices/Lists, & DFS/BFS", code: `# Topic 7: Graph Foundations, Adjacency Matrices/Lists, & DFS/BFS\n# ==== WRITE YOUR CODE HERE ====` },
     8: {
         title: "Sorting Algorithms (Bubble, Insertion, Selection, Quick, & Merge Sort)",
         code: `# Topic 8: Sorting Algorithms
-import js
+# Every sort works on a list of dicts and sorts by one field of each dict.
+# descending=True puts the biggest first. Each one also returns how much work it did.
+import json
 from js import pushAction
 
-def sort_game_inventory():
-    inv = []
-    if hasattr(js, 'harvestInventory') and js.harvestInventory:
-        inv = js.harvestInventory
-    elif hasattr(js, 'playerInventory') and js.playerInventory:
-        inv = js.playerInventory
-    else:
-        # Fallback dummy list kung wala pang laman ang basket
-        inv = [{"name": "Rose", "qty": 5}, {"name": "Daisy", "qty": 12}, {"name": "Tulip", "qty": 3}]
 
-    # I-convert sa Python list
-    items = list(inv)
-    n = len(items)
+def goes_before(a, b, descending):
+    return a > b if descending else a < b
 
-    def get_qty(item):
-        try:
-            return item.qty if hasattr(item, 'qty') else item['qty']
-        except:
-            return 1
 
-    # Insertion Sort para i-sort ang items pababa (highest quantity muna)
-    for i in range(1, n):
-        key_item = items[i]
+def bubble_sort(items, field, descending=True):
+    a = list(items)
+    comparisons = 0
+    for end in range(len(a) - 1, 0, -1):
+        swapped = False
+        for i in range(end):
+            comparisons += 1
+            if goes_before(a[i + 1][field], a[i][field], descending):
+                a[i], a[i + 1] = a[i + 1], a[i]
+                swapped = True
+        if not swapped:
+            break
+    return a, comparisons
+
+
+def insertion_sort(items, field, descending=True):
+    a = list(items)
+    comparisons = shifts = 0
+    for i in range(1, len(a)):
+        current = a[i]
         j = i - 1
-        while j >= 0 and get_qty(items[j]) < get_qty(key_item):
-            items[j + 1] = items[j]
+        while j >= 0:
+            comparisons += 1
+            if not goes_before(current[field], a[j][field], descending):
+                break
+            a[j + 1] = a[j]              # shift the one in the way to the right
+            shifts += 1
             j -= 1
-        items[j + 1] = key_item
+        a[j + 1] = current
+    return a, comparisons, shifts
 
-    if hasattr(js, 'harvestInventory'):
-        js.harvestInventory = items
-    
-    if hasattr(js, 'renderInventory'):
-        try:
-            js.renderInventory()
-        except Exception:
-            pass
-    elif hasattr(js, 'renderVisualSortedInventory'):
-        try:
-            js.renderVisualSortedInventory(items)
-        except Exception:
-            pass
-        
-    pushAction("Sorted Harvest Basket using Insertion Sort")
-    print("Inventory successfully sorted and updated in the game UI!")
 
-sort_game_inventory()
+def selection_sort(items, field, descending=True):
+    a = list(items)
+    comparisons = 0
+    for i in range(len(a) - 1):
+        best = i
+        for j in range(i + 1, len(a)):
+            comparisons += 1
+            if goes_before(a[j][field], a[best][field], descending):
+                best = j
+        a[i], a[best] = a[best], a[i]
+    return a, comparisons
+
+
+def quick_sort(items, field, descending=True):
+    a = list(items)
+    count = [0]
+
+    def sort(lo, hi):
+        if lo >= hi:
+            return
+        pivot = a[hi][field]
+        i = lo
+        for j in range(lo, hi):
+            count[0] += 1
+            if goes_before(a[j][field], pivot, descending):
+                a[i], a[j] = a[j], a[i]
+                i += 1
+        a[i], a[hi] = a[hi], a[i]
+        sort(lo, i - 1)
+        sort(i + 1, hi)
+
+    sort(0, len(a) - 1)
+    return a, count[0]
+
+
+def merge_sort(items, field, descending=True):
+    count = [0]
+
+    def sort(a):
+        if len(a) <= 1:
+            return a
+        mid = len(a) // 2
+        left, right = sort(a[:mid]), sort(a[mid:])
+        merged, i, j = [], 0, 0
+        while i < len(left) and j < len(right):
+            count[0] += 1
+            if goes_before(right[j][field], left[i][field], descending):
+                merged.append(right[j])
+                j += 1
+            else:
+                merged.append(left[i])
+                i += 1
+        return merged + left[i:] + right[j:]
+
+    return sort(list(items)), count[0]
+
+
+def boutique_sort(basket_json, field, descending):
+    # Feature A: the Boutique Auto-Organizer keeps your harvest basket in order with INSERTION SORT
+    basket = json.loads(basket_json)
+    ordered, comparisons, shifts = insertion_sort(basket, field, descending)
+    return json.dumps({"order": [b["key"] for b in ordered], "comparisons": comparisons, "shifts": shifts})
+
+
+def expo_rank(data_json):
+    # Feature B: the Bouquet Expo ranks the day's sales and harvests with QUICK SORT
+    data = json.loads(data_json)
+    sales, c1 = quick_sort(data["sales"], "coins", True)
+    harvests, c2 = quick_sort(data["harvests"], "value", True)
+    return json.dumps({"sales": [x["id"] for x in sales], "harvests": [x["id"] for x in harvests], "comparisons": c1 + c2})
+
+
+sample = [{"name": n, "value": v} for n, v in [("Rose", 25), ("Lotus", 50), ("Daisy", 150), ("Sakura", 30), ("Sunflower", 110)]]
+for label, result in [("Bubble", bubble_sort(sample, "value")), ("Insertion", insertion_sort(sample, "value")),
+                      ("Selection", selection_sort(sample, "value")), ("Quick", quick_sort(sample, "value")), ("Merge", merge_sort(sample, "value"))]:
+    print(label, "->", [x["name"] for x in result[0]], "| comparisons:", result[1])
+
+pushAction("Sorting algorithms ready: the game now uses your code")
+print("Topic 8 ready! Press Auto-Sort in Inventory & Tools, and finish a day to see the Bouquet Expo.")
 `
     },
-   
-    9: {
-        title: "Searching Algorithms (Linear Search vs. Binary Search)",
-        code: `# Topic 9: Searching Algorithms
-    ==== WRITE YOUR CODE HERE ====
-    `
-    },
-   
-    10: {
-        title: "Advanced Strategic Paradigms (Dijkstra's Algorithm & Greedy Patterns)",
-        code: `# Topic 10: Advanced Strategic Paradigms
-        ==== WRITE YOUR CODE HERE ====
-        `
-    },
-   
-    11: {
-        title: "Dynamic Programming (DP), Memoization, & Divide-and-Conquer",
-        code: `# Topic 11: Dynamic Programming (DP)
-        ==== WRITE YOUR CODE HERE ====
-        `
-    }
+    9: { title: "Searching Algorithms (Linear Search vs. Binary Search)", code: `# Topic 9: Searching Algorithms\n# ==== WRITE YOUR CODE HERE ====` },
+    10: { title: "Advanced Strategic Paradigms (Dijkstra's Algorithm & Greedy Patterns)", code: `# Topic 10: Advanced Strategic Paradigms\n# ==== WRITE YOUR CODE HERE ====` },
+    11: { title: "Dynamic Programming (DP), Memoization, & Divide-and-Conquer", code: `# Topic 11: Dynamic Programming (DP)\n# ==== WRITE YOUR CODE HERE ====` }
 };
-
 
 // Safe stubs for removed visualizers
 window.renderPlantTree = function () {};
@@ -906,7 +966,7 @@ function buildTile(i) {
         else if (!plant.watered) badge = `<span class="tile-badge bg-sky-100 text-sky-700">Dry 💧</span>`;
         else badge = `<span class="tile-badge bg-emerald-100 text-emerald-700">Watered</span>`;
         const tag = m ? `<span class="mut-tag">${m.icon} ${m.name} x${m.mult}</span>` : "";
-        const perch = m && (plant.mutation === "pollinated" || plant.mutation === "winged") ? `<img class="perch" src="assets/butterfly-${(Number(i) % 8) + 1}.png" alt="" onerror="this.remove()">` : "";
+        const perch = m && (plant.mutation === "pollinated" || plant.mutation === "winged") ? `<img class="perch" src="butterfly-${(Number(i) % 8) + 1}.png" alt="" onerror="this.remove()">` : "";
         cell.innerHTML = art + badge + tag + perch;
     } else {
         // Empty tile: hover shows the matured look of the selected seed
@@ -924,12 +984,14 @@ function buildTile(i) {
 }
 
 function renderTile(i) {
+    registrySync(i);
     const grid = document.getElementById("garden-grid");
     const old = grid && grid.children[i];
     if (old) old.replaceWith(buildTile(i));
 }
 
 function renderGarden() {
+    registryResync();
     const grid = document.getElementById("garden-grid");
     if (!grid) return;
     grid.innerHTML = "";
@@ -997,9 +1059,11 @@ async function handleTileClick(i, el) {
         harvestCount[plant.name] = (harvestCount[plant.name] || 0) + 1;
         if (plant.mutation) mutHarvested[plant.mutation] = (mutHarvested[plant.mutation] || 0) + 1;
         dailyStats.harvestCount++;
+        const logId = logHarvest(plant.name, plant.mutation);
+        routeHarvest(plant.name);
         floatPop(`+1 ${flowerImg(plant.name, 20)} ${mutName}${plant.name}`, "gain", el);
         showToast(`Harvested 1x ${mutName}${plant.name} (${FLOWER_CATALOG[plant.name].rarity}) into your inventory! 🧺`);
-        pushAction(`Harvested ${mutName}${plant.name}`, () => undoHarvest(i, snap, wasNew));
+        pushAction(`Harvested ${mutName}${plant.name}`, () => undoHarvest(i, snap, wasNew, logId));
         delete gardenGridState[i];
         renderTile(i); updatePlayerStats();
         return;
@@ -1030,6 +1094,368 @@ function setTool(tool) {
 }
 
 // ---------------------------------------------------------------
+// PART 3: Sorting algorithms (Topic 8) & Hash tables (Topic 6)
+//   A. Boutique Auto-Organizer ... Insertion Sort keeps the harvest basket in order
+//   B. Bouquet Expo ............... Quick Sort ranks the day's sales and harvests
+//   C. VIP Desk ................... Hash table with chaining: instant customer lookup & order routing
+//   D. Greenhouse Memory .......... Hash table that REHASHES when its load factor gets too high
+// Each one runs in JavaScript. Run Topic 6 / Topic 8 in the Code Lab and YOUR Python code takes over.
+// ---------------------------------------------------------------
+const nowMs = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
+const FLOWER_CODE = { "Rose": "ROS", "Sakura": "SAK", "Lotus": "LOT", "Hibiscus": "HIB", "Cherry Blossom": "CHB", "Sunflower": "SUN", "Daisy": "DAI", "Morning Glory": "MOG", "Pink Cosmos": "PKC", "Mexican Aster": "MXA" };
+const CODE_FLOWER = Object.fromEntries(Object.entries(FLOWER_CODE).map(([n, c]) => [c, n]));
+const growthSeconds = name => TIERS[FLOWER_CATALOG[name].rarity].sec * 4;
+
+// Call a function from the student's Python (null when it is missing or fails)
+function pyCall(name, ...args) {
+    try {
+        const fn = pyodideInstance && pyodideInstance.globals.get(name);
+        if (!fn) return null;
+        const out = fn(...args);
+        if (fn.destroy) fn.destroy();
+        return out === undefined ? null : out;
+    } catch (e) { return null; }
+}
+
+// ---------------- Sorting algorithms ----------------
+// Insertion sort: keep a sorted left part and slide each new item into its place. Great for "almost sorted" lists.
+function insertionSort(items, keyFn, desc) {
+    const a = items.slice(); let comparisons = 0, shifts = 0;
+    for (let i = 1; i < a.length; i++) {
+        const cur = a[i], k = keyFn(cur); let j = i - 1;
+        while (j >= 0) {
+            comparisons++;
+            const kj = keyFn(a[j]);
+            if (!(desc ? kj < k : kj > k)) break;
+            a[j + 1] = a[j]; shifts++; j--;
+        }
+        a[j + 1] = cur;
+    }
+    return { sorted: a, comparisons, shifts };
+}
+
+// Quick sort: pick a pivot, put smaller ones before it and bigger ones after it, then sort both sides.
+function quickSort(items, keyFn, desc) {
+    const a = items.slice(); let comparisons = 0;
+    const before = (x, y) => (desc ? x > y : x < y);
+    (function qs(lo, hi) {
+        if (lo >= hi) return;
+        const pv = keyFn(a[hi]); let i = lo;
+        for (let j = lo; j < hi; j++) { comparisons++; if (before(keyFn(a[j]), pv)) { [a[i], a[j]] = [a[j], a[i]]; i++; } }
+        [a[i], a[hi]] = [a[hi], a[i]];
+        qs(lo, i - 1); qs(i + 1, hi);
+    })(0, a.length - 1);
+    return { sorted: a, comparisons };
+}
+
+// ---------------- Hash table with chaining & rehashing ----------------
+let hashFnCache = null;                       // the student's hash_key() once Topic 6 has been run
+const hashPy = { mode: "js", bad: false };
+const jsHash = (key, cap) => { let h = 0; for (const ch of String(key)) h = (h * 31 + ch.codePointAt(0)) % 1000000007; return h % cap; };
+
+function hashIndex(key, cap) {
+    if (hashFnCache && !hashPy.bad) {
+        try {
+            const v = Number(hashFnCache(String(key), cap));
+            if (Number.isInteger(v) && v >= 0 && v < cap) return v;
+        } catch (e) { /* fall through */ }
+        hashPy.bad = true; hashPy.mode = "js";
+        setTimeout(rebuildHashTables, 0);
+        showToast("Your hash_key() gave a bad bucket, so the game switched back to the built-in hash.");
+    }
+    return jsHash(key, cap);
+}
+
+class ChainedHashTable {
+    constructor(cap = 8, maxLoad = 0.75) {
+        this.cap = cap; this.maxLoad = maxLoad; this.size = 0; this.rehashes = 0; this.lastRehash = null; this.onRehash = null;
+        this.buckets = Array.from({ length: cap }, () => []);
+    }
+    index(key, cap = this.cap) { return hashIndex(key, cap); }
+    put(key, value) {
+        const b = this.buckets[this.index(key)], hit = b.find(e => e.key === key);
+        if (hit) { hit.value = value; return; }
+        b.push({ key, value }); this.size++;      // a busy bucket simply grows a chain: that is a collision handled
+        if (this.size / this.cap > this.maxLoad) this.rehash();
+    }
+    get(key) {
+        const idx = this.index(key), chain = this.buckets[idx]; let probes = 0;
+        for (const e of chain) { probes++; if (e.key === key) return { found: true, value: e.value, bucket: idx, probes, chain: chain.map(x => x.key) }; }
+        return { found: false, value: null, bucket: idx, probes, chain: chain.map(x => x.key) };
+    }
+    remove(key) {
+        const b = this.buckets[this.index(key)], i = b.findIndex(e => e.key === key);
+        if (i < 0) return false;
+        b.splice(i, 1); this.size--; return true;
+    }
+    loadFactor() { return this.size / this.cap; }
+    entries() { return this.buckets.flat(); }
+    chainedCount() { return this.buckets.reduce((s, b) => s + Math.max(0, b.length - 1), 0); }
+    place(entries, cap) {
+        this.cap = cap; this.buckets = Array.from({ length: cap }, () => []);
+        entries.forEach(e => this.buckets[this.index(e.key)].push(e));
+    }
+    // Too full: double the buckets and move every entry to its NEW bucket
+    rehash(newCap = this.cap * 2) {
+        const t0 = nowMs(), entries = this.entries(), from = this.cap;
+        this.place(entries, newCap);
+        this.rehashes++;
+        this.lastRehash = { from, to: newCap, moved: entries.length, ms: Math.round((nowMs() - t0) * 100) / 100 };
+        if (this.onRehash) this.onRehash(this.lastRehash);
+    }
+    reindex() { this.place(this.entries(), this.cap); }   // same size, new hash function
+}
+
+const vipTable = new ChainedHashTable(4);     // key: customer ID  -> VIP order details
+const routeTable = new ChainedHashTable(8);   // key: flower code  -> customer IDs waiting for it
+const plantTable = new ChainedHashTable(8);   // key: tile "T12"   -> plant data
+vipTable.onRehash = info => showToast(`👑 VIP Desk rehashed: ${info.from} → ${info.to} buckets`);
+plantTable.onRehash = info => {
+    showToast(`🧠 Greenhouse memory rehashed: ${info.from} → ${info.to} buckets (moved ${info.moved} plants in ${info.ms}ms, no lag!)`);
+    pushAction(`Memory rehashed ${info.from} → ${info.to} buckets`);
+};
+
+function refreshHashHook() {
+    try { if (hashFnCache && hashFnCache.destroy) hashFnCache.destroy(); } catch (e) {}
+    hashFnCache = null; hashPy.bad = false;
+    if (pyodideInstance) { try { hashFnCache = pyodideInstance.globals.get("hash_key") || null; } catch (e) { hashFnCache = null; } }
+    hashPy.mode = hashFnCache ? "python" : "js";
+}
+function rebuildHashTables() { [vipTable, routeTable, plantTable].forEach(t => t.reindex()); updatePlayerStats(); }
+function onPythonRan() { refreshHashHook(); rebuildHashTables(); }
+
+// ---------------- C. VIP Desk: customer lookup & instant order routing ----------------
+let vipSeq = 1002;                            // the two starting VIPs are VIP-1001 and VIP-1002
+const nextVipId = () => "VIP-" + (++vipSeq);
+let vipQuery = "", vipResult = null, fameBonus = 0;
+const fameMult = () => 1 + fameBonus;
+
+function vipInfo(o) {
+    const tiers = Object.keys(TIERS), [who, face] = orderWho(o);
+    const rarity = Object.keys(o.items).map(f => FLOWER_CATALOG[f].rarity).sort((a, b) => tiers.indexOf(b) - tiers.indexOf(a))[0];
+    return { cid: o.cid, who, face, items: o.items, waterNeed: Object.values(o.items).reduce((s, q) => s + q * 4, 0), rarity, reward: Math.round(orderCoins(o) * 1.25) };
+}
+function routeAdd(code, cid) {
+    const r = routeTable.get(code);
+    if (r.found) { if (!r.value.includes(cid)) r.value.push(cid); } else routeTable.put(code, [cid]);
+}
+function routeDrop(code, cid) {
+    const r = routeTable.get(code);
+    if (!r.found) return;
+    const i = r.value.indexOf(cid); if (i >= 0) r.value.splice(i, 1);
+    if (!r.value.length) routeTable.remove(code);
+}
+function registerVip(o) { if (!o || !o.vip) return; vipTable.put(o.cid, vipInfo(o)); Object.keys(o.items).forEach(f => routeAdd(FLOWER_CODE[f], o.cid)); }
+function unregisterVip(o) { if (!o || !o.vip) return; vipTable.remove(o.cid); Object.keys(o.items).forEach(f => routeDrop(FLOWER_CODE[f], o.cid)); }
+
+function vipLookup(q) {
+    if (q !== undefined) vipQuery = q;
+    const raw = String(vipQuery || "").trim();
+    if (!raw) { vipResult = null; renderCustomerOrders(); return; }
+    const up = raw.toUpperCase(), asName = Object.keys(FLOWER_CATALOG).find(n => n.toUpperCase() === up);
+    const kind = up.startsWith("VIP") ? "customer" : "flower", key = kind === "customer" ? up : (asName ? FLOWER_CODE[asName] : up);
+    vipResult = { kind, key, scan: activeCustomerOrders.length, ...(kind === "customer" ? vipTable : routeTable).get(key) };
+    renderCustomerOrders();
+}
+
+// A flower was harvested: ONE hash lookup tells us which VIPs are waiting for it (no loop over all customers)
+function routeHarvest(name) {
+    const code = FLOWER_CODE[name], r = routeTable.get(code);
+    if (!r.found) return;
+    const waiting = r.value.map(cid => activeCustomerOrders.find(o => o.cid === cid)).filter(Boolean);
+    if (!waiting.length) return;
+    waiting.forEach(o => { o.routed = true; });
+    vipResult = { kind: "flower", key: code, scan: activeCustomerOrders.length, ...r };
+    showToast(`👑 VIP routing: ${waiting.map(o => `${orderWho(o)[0]} (${o.cid})`).join(", ")} ${waiting.length > 1 ? "are" : "is"} waiting for ${name}! Bucket ${r.bucket}${r.chain.length > 1 ? `, chained x${r.chain.length}` : ""}, found in ${r.probes} probe${r.probes > 1 ? "s" : ""}.`);
+}
+
+function vipResultHTML() {
+    const r = vipResult;
+    if (!r) return `<div class="vd-hint">Type a Customer ID (like <b>VIP-1001</b>) or a flower code (like <b>ROS</b>) and press Find.</div>`;
+    const tbl = r.kind === "customer" ? vipTable : routeTable;
+    const chain = r.chain.length ? r.chain.map(k => `<span class="chip">${k}</span>`).join(" → ") : "empty bucket";
+    let body;
+    if (r.kind === "customer") {
+        const v = r.value;
+        body = r.found ? `${v.face} <b>${v.who}</b> · 💧 needs ${v.waterNeed} waterings · ✨ ${v.rarity.toLowerCase()} · 🪙 reward ${v.reward}c`
+            : "No VIP has that Customer ID.";
+    } else {
+        body = r.found ? `Waiting for ${CODE_FLOWER[r.key] || r.key}: ${r.value.map(cid => { const o = activeCustomerOrders.find(x => x.cid === cid); return o ? `${orderWho(o)[0]} (${cid})` : cid; }).join(", ")}`
+            : "No VIP is waiting for that flower code.";
+    }
+    return `<div class="vd-res">hash("${r.key}") → bucket <b>${r.bucket}</b> of ${tbl.cap} · chain: ${chain} · ${r.probes} probe${r.probes === 1 ? "" : "s"}
+        <small>(a plain loop could check all ${r.scan} orders)</small><div class="vd-body">${body}</div></div>`;
+}
+
+function vipDeskHTML() {
+    const t = vipTable;
+    const hit = vipResult && vipResult.kind === "customer" ? vipResult.bucket : -1;
+    const buckets = t.buckets.map((b, i) => `<div class="bk ${b.length > 1 ? "collide" : b.length ? "used" : ""} ${i === hit ? "hit" : ""}"><i>${i}</i>${b.map(e => `<span class="chip">${e.key}</span>`).join("")}</div>`).join("");
+    return `<div class="vip-desk"><div class="vd-head"><h3>👑 VIP Desk <small>Hash table with chaining</small></h3>
+        <div class="vd-stats"><span>Buckets <b>${t.cap}</b></span><span>VIPs <b>${t.size}</b></span><span>Load <b>${t.loadFactor().toFixed(2)}</b></span><span>Chained <b>${t.chainedCount()}</b></span><span>Rehashes <b>${t.rehashes}</b></span>
+        <span>Hash <b>${hashPy.mode === "python" ? "your Python 🐍" : "built-in"}</b></span>${fameBonus ? `<span class="fame">Shop fame <b>x${fameMult().toFixed(2)}</b></span>` : ""}</div></div>
+        <div class="vd-buckets">${buckets}</div>
+        <div class="vd-search"><input id="vip-q" type="text" placeholder="VIP-1001 or ROS" value="${escHTML(vipQuery)}" oninput="vipQuery=this.value" onkeydown="if(event.key==='Enter')vipLookup()" aria-label="Customer ID or flower code">
+        <button class="btn-pastel btn-sky px-4 py-1.5 text-xs" onclick="vipLookup()">🔎 Find</button></div>${vipResultHTML()}</div>`;
+}
+
+// ---------------- D. Greenhouse Memory: plant data in a hash table that rehashes itself ----------------
+let memQuery = "", memResult = null;
+const plantKey = i => "T" + i;
+function registrySync(i) {
+    const p = gardenGridState[i];
+    if (p) plantTable.put(plantKey(i), { name: p.name, stage: p.stageIndex, mutation: p.mutation || null, damaged: !!p.damaged });
+    else plantTable.remove(plantKey(i));
+}
+function registryResync() {
+    const present = new Set(Object.keys(gardenGridState).map(plantKey));
+    plantTable.entries().map(e => e.key).forEach(k => { if (!present.has(k)) plantTable.remove(k); });
+    Object.keys(gardenGridState).forEach(registrySync);
+}
+function memLookup(q) {
+    if (q !== undefined) memQuery = q;
+    const n = String(memQuery).trim();
+    memResult = n === "" ? null : { tile: n, ...plantTable.get(plantKey(n)) };
+    renderInventoryView();
+}
+function memResultHTML() {
+    const r = memResult;
+    if (!r) return `<div class="vd-hint">Type a tile number to look its plant up in the table.</div>`;
+    const chain = r.chain.length ? r.chain.map(k => `<span class="chip">${k}</span>`).join(" → ") : "empty bucket";
+    const what = r.found ? `${r.value.name} · stage ${STAGE_NAMES[Math.min(4, r.value.stage)]}${r.value.mutation ? " · " + MUTATIONS[r.value.mutation].name : ""}` : "nothing planted there";
+    return `<div class="vd-res">hash("${plantKey(r.tile)}") → bucket <b>${r.bucket}</b> of ${plantTable.cap} · chain: ${chain} · ${r.probes} probe${r.probes === 1 ? "" : "s"}<div class="vd-body">${what}</div></div>`;
+}
+function memoryHTML() {
+    const t = plantTable, lf = t.loadFactor(), lr = t.lastRehash;
+    const cells = t.buckets.map(b => `<i class="mc ${b.length > 1 ? "u2" : b.length ? "u1" : ""}" title="${b.length} plant${b.length === 1 ? "" : "s"}"></i>`).join("");
+    return `<div class="inv-sec"><h3>🧠 Greenhouse Memory <small>Hash table · chaining · rehashes when the load goes over ${t.maxLoad}</small></h3>
+        <div class="vd-stats"><span>Greenhouse <b>${toolsInventory["Plots"]} plots</b> (${gridCols()} wide)</span><span>Plants stored <b>${t.size}</b></span><span>Buckets <b>${t.cap}</b></span>
+        <span>Load factor <b>${lf.toFixed(2)}</b></span><span>Rehashes <b>${t.rehashes}</b></span><span>Chained <b>${t.chainedCount()}</b></span><span>Hash <b>${hashPy.mode === "python" ? "your Python 🐍" : "built-in"}</b></span></div>
+        <div class="mem-meter" title="Load factor"><i style="width:${Math.min(100, lf * 100)}%"></i><span class="mark" style="left:${t.maxLoad * 100}%"></span></div>
+        <div class="mem-grid">${cells}</div>
+        <div class="mem-note">${lr ? `Last rehash: ${lr.from} → ${lr.to} buckets · moved ${lr.moved} plants in ${lr.ms}ms. Nobody noticed a thing! ✨` : "No rehash yet. Plant more flowers and watch the table grow."}</div>
+        <div class="vd-search"><input id="mem-q" type="number" min="0" placeholder="Tile number" value="${escHTML(memQuery)}" oninput="memQuery=this.value" onkeydown="if(event.key==='Enter')memLookup()" aria-label="Tile number">
+        <button class="btn-pastel btn-sky px-4 py-1.5 text-xs" onclick="memLookup()">🔎 Find plant</button></div>${memResultHTML()}</div>`;
+}
+
+// ---------------- A. Boutique Auto-Organizer (Insertion Sort) ----------------
+let basketOrder = [];
+const basketSort = { key: null, desc: true, keep: false, stats: null, flash: new Set() };
+const basketKeys = () => [...Object.keys(mutInventory).filter(k => mutInventory[k] > 0), ...Object.keys(flowerInventory).filter(k => flowerInventory[k] > 0)];
+function basketMeta(k) {
+    const [f, mk] = k.split("|"), qty = mk ? (mutInventory[k] || 0) : (flowerInventory[f] || 0);
+    if (qty <= 0) return null;
+    return { key: k, name: f, mut: mk || null, qty, value: mutPrice(f, mk || null), growth: growthSeconds(f) };
+}
+
+function runBasketSort(incremental) {
+    const items = basketOrder.map(basketMeta).filter(Boolean), key = basketSort.key, desc = basketSort.desc;
+    let order = null, comps = 0, shifts = 0, src = "JavaScript";
+    const out = pyCall("boutique_sort", JSON.stringify(items.map(i => ({ key: i.key, value: i.value, growth: i.growth }))), key, desc);
+    if (out) {
+        try {
+            const r = JSON.parse(out);
+            if (Array.isArray(r.order) && r.order.length === items.length && new Set(r.order).size === items.length && r.order.every(k => items.some(i => i.key === k))) { order = r.order; comps = r.comparisons; shifts = r.shifts; src = "your Python 🐍"; }
+        } catch (e) { /* use JavaScript below */ }
+    }
+    if (!order) { const r = insertionSort(items, it => it[key], desc); order = r.sorted.map(i => i.key); comps = r.comparisons; shifts = r.shifts; }
+    const before = basketOrder.slice();
+    basketOrder = order;
+    basketSort.flash = new Set(order.filter((k, i) => before[i] !== k));
+    basketSort.stats = { n: items.length, comps, shifts, src, key, desc, incremental };
+    setTimeout(() => { basketSort.flash = new Set(); }, 1800);
+}
+
+// New harvests arrive one at a time, so each one only has to be inserted into the sorted basket
+function syncBasketOrder() {
+    const present = basketKeys(), had = new Set(basketOrder);
+    basketOrder = basketOrder.filter(k => present.includes(k));
+    const added = present.filter(k => !had.has(k));
+    basketOrder.push(...added);
+    if (added.length && basketSort.keep && basketSort.key) runBasketSort(true);
+}
+function setBasketKey(k) { basketSort.key = k; basketSort.desc = k === "value"; if (basketSort.keep) { syncBasketOrder(); runBasketSort(false); } renderInventoryView(); }
+function toggleBasketDir() { basketSort.desc = !basketSort.desc; if (basketSort.keep && basketSort.key) { syncBasketOrder(); runBasketSort(false); } renderInventoryView(); }
+function toggleKeepSorted(on) { basketSort.keep = on; if (on && basketSort.key) { syncBasketOrder(); runBasketSort(false); } renderInventoryView(); }
+function autoSortBasket() {
+    if (!basketKeys().length) { showToast("Your basket is empty. Harvest some flowers first!"); return; }
+    if (!basketSort.key) { basketSort.key = "value"; basketSort.desc = true; }
+    basketSort.keep = true;
+    syncBasketOrder(); runBasketSort(false);
+    renderInventoryView();
+    const s = basketSort.stats;
+    showToast(`✨ Basket organized by ${s.key === "value" ? "market value" : "growth time"}: ${s.comps} comparisons, ${s.shifts} shifts (${s.src}).`);
+}
+
+function sortBarHTML() {
+    const s = basketSort, st = s.stats;
+    const msg = st ? `Insertion Sort ${st.incremental ? "(a new harvest slid into place)" : "(full sort)"}: <b>${st.comps}</b> comparisons and <b>${st.shifts}</b> shifts over ${st.n} stack${st.n === 1 ? "" : "s"} · ${st.src}`
+        : "Choose how to sort, then press Auto-Sort. New harvests will slide into place by themselves.";
+    return `<div class="sort-bar"><span class="sb-title">✨ Boutique Auto-Organizer <small>Insertion Sort</small></span>
+        <div class="sb-group"><button class="sb-btn ${s.key === "value" ? "on" : ""}" onclick="setBasketKey('value')">🪙 Market value</button><button class="sb-btn ${s.key === "growth" ? "on" : ""}" onclick="setBasketKey('growth')">⏳ Growth time</button></div>
+        <button class="sb-btn" onclick="toggleBasketDir()">${s.desc ? "High → Low ⬇" : "Low → High ⬆"}</button>
+        <button class="btn-pastel btn-mint px-4 py-1.5 text-xs" onclick="autoSortBasket()">✨ Auto-Sort</button>
+        <label class="sb-keep"><input type="checkbox" ${s.keep ? "checked" : ""} onchange="toggleKeepSorted(this.checked)"> keep sorted</label></div>
+        <div class="sort-stats">${msg}</div>`;
+}
+
+function basketCardHTML(m, rank) {
+    const d = FLOWER_CATALOG[m.name], each = m.value, flash = basketSort.flash.has(m.key) ? "just-sorted" : "", rk = rank ? `<span class="rank">#${rank}</span>` : "";
+    if (m.mut) {
+        const mu = MUTATIONS[m.mut];
+        return `<div class="inv-card tc-${d.rarity} mut mut-${m.mut} ${flash}">${rk}<span class="mrib">${mu.icon} ${mu.name}</span><span class="qty">x${m.qty}</span><div style="height:14px"></div>${flowerImg(m.name, 104)}<h4>${m.name}</h4>
+            <span class="bonus">x${mu.mult} · +${each - d.price}c each</span><div><span class="val">🪙 ${each * m.qty} (${each} each)</span></div><div class="gr">⏳ ${m.growth}s to grow</div></div>`;
+    }
+    return `<div class="inv-card tc-${d.rarity} ${flash}">${rk}<span class="qty">x${m.qty}</span>${flowerImg(m.name, 104)}<h4>${m.name}</h4>
+        <span class="rar rar-${d.rarity}">${d.rarity}</span><div><span class="val">🪙 ${d.price * m.qty} (${d.price} each)</span></div><div class="gr">⏳ ${m.growth}s to grow</div></div>`;
+}
+
+// ---------------- B. Bouquet Expo: rank the day with Quick Sort ----------------
+let dayLog = { harvests: [], sales: [] }, logSeq = 0;
+function logHarvest(name, mut) {
+    const id = ++logSeq;
+    dayLog.harvests.push({ id, name, mut: mut || null, value: mutPrice(name, mut || null) });
+    return id;
+}
+function logSale(order, who, coins, vip) {
+    const id = ++logSeq;
+    dayLog.sales.push({ id, who, coins, vip: !!vip, items: { ...order.items } });
+    return id;
+}
+
+function computeShowcase() {
+    const sales = dayLog.sales.map(s => ({ ...s })), harvests = dayLog.harvests.map(h => ({ ...h }));
+    let salesOrder = null, harvOrder = null, comps = 0, src = "JavaScript";
+    const out = pyCall("expo_rank", JSON.stringify({ sales: sales.map(s => ({ id: s.id, coins: s.coins })), harvests: harvests.map(h => ({ id: h.id, value: h.value })) }));
+    if (out) {
+        try {
+            const r = JSON.parse(out);
+            if (Array.isArray(r.sales) && Array.isArray(r.harvests) && r.sales.length === sales.length && r.harvests.length === harvests.length) { salesOrder = r.sales; harvOrder = r.harvests; comps = r.comparisons; src = "your Python 🐍"; }
+        } catch (e) { /* use JavaScript below */ }
+    }
+    if (!salesOrder) {
+        const a = quickSort(sales, s => s.coins, true), b = quickSort(harvests, h => h.value, true);
+        salesOrder = a.sorted.map(s => s.id); harvOrder = b.sorted.map(h => h.id); comps = a.comparisons + b.comparisons;
+    }
+    const sById = Object.fromEntries(sales.map(s => [s.id, s])), hById = Object.fromEntries(harvests.map(h => [h.id, h]));
+    const top3 = salesOrder.slice(0, 3).map(id => sById[id]).filter(Boolean), best = harvOrder.length ? hById[harvOrder[0]] || null : null;
+    const bonus = Math.round(top3.reduce((s, x) => s + x.coins, 0) * 0.1) + (best ? Math.round(best.value * 0.25) : 0);
+    return { top3, best, comps, src, algo: "Quick Sort", bonus, fame: Math.round(Math.min(3, top3.length) * 5) / 100, nSales: sales.length, nHarv: harvests.length };
+}
+
+function showcaseHTML(sc) {
+    const medals = ["🥇", "🥈", "🥉"];
+    const podium = sc.top3.length ? sc.top3.map((s, i) => `<div class="sc-row"><span class="sc-medal">${medals[i]}</span><div class="sc-imgs">${Object.keys(s.items).slice(0, 2).map(f => flowerImg(f, 30)).join("")}</div>
+        <div class="sc-info"><b>${s.who}${s.vip ? " 👑" : ""}</b><small>${Object.entries(s.items).map(([f, q]) => `${q}x ${f}`).join(", ")}</small></div><span class="sc-coins">🪙 ${s.coins}</span></div>`).join("")
+        : `<div class="sc-empty">No arrangements sold today. Deliver an order to join the Expo!</div>`;
+    const best = sc.best ? `<div class="sc-row best">${flowerImg(sc.best.name, 34)}<div class="sc-info"><b>${sc.best.mut ? MUTATIONS[sc.best.mut].name + " " : ""}${sc.best.name}</b><small>Most valuable harvest</small></div><span class="sc-coins">🪙 ${sc.best.value}</span></div>`
+        : `<div class="sc-empty">Nothing was harvested today.</div>`;
+    return `<div class="sc-title">🌸 Bouquet Expo <small>${sc.algo} · ${sc.comps} comparisons · ${sc.src}</small></div>
+        <div class="sc-sub">Top 3 best-selling arrangements</div>${podium}<div class="sc-sub">Most valuable harvest</div>${best}
+        <div class="sc-bonus">🎁 Expo bonus <b>+${sc.bonus}c</b>${sc.fame ? ` · Shop fame <b>x${(1 + sc.fame).toFixed(2)}</b> tomorrow` : ""}</div>`;
+}
+
+// ---------------------------------------------------------------
 // Inventory (big satchel) & Customer orders (big tickets)
 // ---------------------------------------------------------------
 const CUSTOMERS = [["Mia", "👧"], ["Lola Rosa", "👵"], ["Kuya Ben", "🧑‍🌾"], ["Ate Luz", "👩‍🎤"], ["Tito Jun", "👨‍🍳"], ["Nene", "🧒"], ["Mang Tonyo", "👴"], ["Ms. Cruz", "👩‍🏫"]];
@@ -1039,7 +1465,7 @@ const orderWho = o => CUSTOMERS[Math.floor(Math.abs(Number(o.id)) * 7919) % CUST
 const mutKeys = f => Object.keys(mutInventory).filter(k => k.startsWith(f + "|") && mutInventory[k] > 0);
 const ownedTotal = f => (flowerInventory[f] || 0) + mutKeys(f).reduce((s, k) => s + mutInventory[k], 0);
 
-// Which flowers an order would use: best mutations first, then plain ones
+// Which flowers an order would use: best mutations first, then plain ones. VIP orders pay +25%, and the Bouquet Expo fame adds more.
 function consumePlan(o) {
     const picks = []; let coins = 0, ok = true;
     for (const [f, q] of Object.entries(o.items)) {
@@ -1053,12 +1479,13 @@ function consumePlan(o) {
         if (need) { const n = Math.min(need, flowerInventory[f] || 0); if (n) { picks.push({ k: null, f, mut: null, n }); coins += n * mutPrice(f, null); } need -= n; }
         if (need) ok = false;
     }
-    return { ok, coins, picks };
+    return { ok, coins: Math.round(coins * (o.vip ? 1.25 : 1) * fameMult()), picks };
 }
 
 function renderInventoryView() {
     const c = document.getElementById("inventory-container");
     if (!c) return;
+    syncBasketOrder();
     const flowers = Object.entries(flowerInventory).filter(([, n]) => n > 0);
     const muts = Object.entries(mutInventory).filter(([, n]) => n > 0);
     const seeds = Object.entries(seedStock).filter(([, n]) => n > 0);
@@ -1067,17 +1494,11 @@ function renderInventoryView() {
     const totalS = seeds.reduce((s, [, n]) => s + n, 0);
     const stat = (ic, val, label, a, b, bd) => `<div class="inv-stat" style="--s1:${a};--s2:${b};--s3:${bd}"><span class="ic">${ic}</span><div><b>${val}</b><span class="l">${label}</span></div></div>`;
 
-    const mutCards = muts.map(([k, n]) => {
-        const [f, mk] = k.split("|"), d = FLOWER_CATALOG[f], m = MUTATIONS[mk], each = mutPrice(f, mk);
-        return `<div class="inv-card tc-${d.rarity} mut mut-${mk}"><span class="mrib">${m.icon} ${m.name}</span><span class="qty">x${n}</span><div style="height:14px"></div>${flowerImg(f, 104)}<h4>${f}</h4>
-            <span class="bonus">x${m.mult} · +${each - d.price}c each</span><div><span class="val">🪙 ${each * n} (${each} each)</span></div></div>`;
-    }).join("");
-    const plainCards = flowers.map(([f, n]) => {
-        const d = FLOWER_CATALOG[f];
-        return `<div class="inv-card tc-${d.rarity}"><span class="qty">x${n}</span>${flowerImg(f, 104)}<h4>${f}</h4>
-            <span class="rar rar-${d.rarity}">${d.rarity}</span><div><span class="val">🪙 ${d.price * n} (${d.price} each)</span></div></div>`;
-    }).join("");
-    const basket = mutCards + plainCards || `<div class="inv-empty">${flowerImg("Rose", 110)}<br>Your basket is empty.<br>Plant, water and harvest flowers to fill it!</div>`;
+    // sorted by the Boutique Auto-Organizer, or (before it was used) mutated flowers first
+    const sorted = !!basketSort.key;
+    const order = sorted ? basketOrder : [...muts.map(([k]) => k), ...flowers.map(([k]) => k)];
+    const basket = order.map(basketMeta).filter(Boolean).map((m, i) => basketCardHTML(m, sorted && basketSort.keep ? i + 1 : 0)).join("")
+        || `<div class="inv-empty">${flowerImg("Rose", 110)}<br>Your basket is empty.<br>Plant, water and harvest flowers to fill it!</div>`;
 
     const packets = seeds.map(([f, n]) => {
         const d = FLOWER_CATALOG[f];
@@ -1095,9 +1516,10 @@ function renderInventoryView() {
     c.innerHTML = `<div class="inv-stats">
             ${stat("🧺", totalF, "Flowers in basket", "#fff", "#ffe6ef", "#f4c6d6")}${stat("🪙", totalV, "Basket value (coins)", "#fff", "#fff3cc", "#f3d98a")}
             ${stat("🌱", totalS, "Seeds in bag", "#fff", "#e5f7ea", "#a6dcb8")}${stat("📖", `${discoveredCount()}/${Object.keys(FLOWER_CATALOG).length}`, "Almanac discovered", "#fff", "#f1e8fc", "#d3c1f0")}</div>
-        <div class="inv-sec grow"><h3>Harvest Basket <small>${totalF} flowers ready to sell${muts.length ? " · mutated ones pay extra!" : ""}</small></h3><div class="inv-grid">${basket}</div></div>
+        <div class="inv-sec grow"><h3>Harvest Basket <small>${totalF} flowers ready to sell${muts.length ? " · mutated ones pay extra!" : ""}</small></h3>${sortBarHTML()}<div class="inv-grid">${basket}</div></div>
         <div class="inv-sec"><h3>Seed Bag <small>${totalS} seeds</small></h3><div class="inv-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">${packets}</div></div>
-        <div class="inv-sec"><h3>Tool Shelf</h3><div class="inv-grid" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr))">${tools}</div></div>`;
+        <div class="inv-sec"><h3>Tool Shelf</h3><div class="inv-grid" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr))">${tools}</div></div>
+        ${memoryHTML()}`;
 }
 
 // ---------------------------------------------------------------
@@ -1115,50 +1537,54 @@ function deliverOrder(orderId) {
         if (p.k) { mutInventory[p.k] -= p.n; if (!mutInventory[p.k]) delete mutInventory[p.k]; }
         else { flowerInventory[p.f] -= p.n; if (!flowerInventory[p.f]) delete flowerInventory[p.f]; }
     });
-    const coins = plan.coins, xp = orderXP(order), bonus = coins - orderCoins(order);
+    const coins = plan.coins, xp = orderXP(order), bonus = coins - orderCoins(order), who = orderWho(order)[0];
     playerCoins += coins; playerXP += xp;
     dailyStats.coinsEarned += coins; dailyStats.salesCount++;
-    showToast(`Order fulfilled! +${coins} Coins${bonus > 0 ? ` (incl. +${bonus} mutation bonus ✨)` : ""} & +${xp} XP 🪙`);
+    const saleId = logSale(order, who, coins, order.vip);
+    showToast(`Order fulfilled! +${coins} Coins${bonus > 0 ? ` (incl. +${bonus} bonus ✨)` : ""} & +${xp} XP 🪙`);
     const fresh = generateNewOrder();
+    unregisterVip(order);
     activeCustomerOrders.splice(idx, 1, fresh);
-    pushAction(`Delivered order to ${orderWho(order)[0]} (+${coins}c)`, () => undoDeliver(order, fresh.id, plan, coins, xp));
+    registerVip(fresh);
+    pushAction(`Delivered order to ${who} (+${coins}c)`, () => undoDeliver(order, fresh.id, plan, coins, xp, saleId));
     document.getElementById("coins-text").classList.add("bump");
     setTimeout(() => document.getElementById("coins-text").classList.remove("bump"), 500);
     updatePlayerStats();
-
-    if (document.getElementById("view-hash-debug") && !document.getElementById("view-hash-debug").classList.contains("hidden")) {
-    renderHashTableDebug();
-}
 }
 
 function renderCustomerOrders() {
     const c = document.getElementById("orders-list-container");
     if (!c) return;
     const plans = activeCustomerOrders.map(o => ({ o, plan: consumePlan(o) }));
-    const ready = plans.filter(x => x.plan.ok).length;
-    const potential = plans.reduce((s, x) => s + (x.plan.ok ? x.plan.coins : orderCoins(x.o)), 0);
+    const ready = plans.filter(x => x.plan.ok).length, vips = activeCustomerOrders.filter(o => o.vip).length;
+    const potential = plans.reduce((s, x) => s + (x.plan.ok ? x.plan.coins : Math.round(orderCoins(x.o) * (x.o.vip ? 1.25 : 1) * fameMult())), 0);
     const cards = plans.map(({ o, plan }) => {
         const ok = plan.ok, [who, face] = orderWho(o), base = orderCoins(o);
         const items = Object.entries(o.items).map(([f, q]) => {
             const have = ownedTotal(f), d = FLOWER_CATALOG[f], usedMut = plan.picks.filter(p => p.f === f && p.mut);
             return `<div class="ord-item tc-${d.rarity}"><div class="ord-img">${flowerImg(f, 62)}</div>
-                <div class="ord-info"><b>${f}</b> <span class="rar rar-${d.rarity}">${d.rarity}</span>
+                <div class="ord-info"><b>${f}</b> <span class="rar rar-${d.rarity}">${d.rarity}</span>${o.vip ? ` <span class="code-chip">${FLOWER_CODE[f]}</span>` : ""}
                 <div class="meter" style="--m1:${have >= q ? "#a9dbb8" : "#ffc2d6"};--m2:${have >= q ? "#7fcf9c" : "#f6a6c1"}"><i style="width:${Math.min(100, (have / q) * 100)}%"></i></div>
                 <div class="cnt" style="color:${have >= q ? "#2f8f62" : "#c4466b"}">${have >= q ? "✓ " : ""}${have} / ${q} in basket · ${d.price}c each</div>
                 ${usedMut.length ? `<span class="bonus">${usedMut.map(p => `${MUTATIONS[p.mut].icon} ${p.n}x ${MUTATIONS[p.mut].name}`).join(", ")}</span>` : ""}</div></div>`;
         }).join("");
-        const reward = ok ? plan.coins : base;
-        return `<div class="ord-card ${ok ? "ready" : ""}"><span class="ord-pin"></span>
+        const reward = ok ? plan.coins : Math.round(base * (o.vip ? 1.25 : 1) * fameMult());
+        const vi = o.vip ? vipInfo(o) : null;
+        return `<div class="ord-card ${ok ? "ready" : ""} ${o.vip ? "vip" : ""} ${o.routed && !ok ? "routed" : ""}"><span class="ord-pin"></span>
+            ${o.vip ? `<span class="vip-tag">👑 VIP · ${o.cid}</span>` : ""}
             <div class="ord-top"><div class="avatar">${face}</div><div><div class="who">${who}</div><div class="kind">${orderType(o) === "bouquet" ? "Wants a custom bouquet" : "Wants a single flower"}</div></div>
-            <span class="ord-badge">${ok ? "Ready to deliver!" : "Gathering..."}</span></div>
+            <span class="ord-badge">${ok ? "Ready to deliver!" : o.routed ? "⚡ A matching flower arrived!" : "Gathering..."}</span></div>
+            ${vi ? `<div class="vip-meta"><span>🔑 ${o.cid}</span><span>💧 Water need: ${vi.waterNeed} waterings</span><span>✨ Rarity: ${vi.rarity.toLowerCase()}</span><span>🪙 VIP reward x1.25</span></div>` : ""}
             <div class="ord-items">${items}</div>
-            <div class="ord-foot"><div class="ord-reward"><span>🪙 +${reward} coins</span>${ok && reward > base ? `<span class="bonus">✨ +${reward - base} mutation bonus</span>` : ""}<span>⭐ +${orderXP(o)} XP</span></div>
+            <div class="ord-foot"><div class="ord-reward"><span>🪙 +${reward} coins</span>${reward > base ? `<span class="bonus">✨ +${reward - base} bonus</span>` : ""}<span>⭐ +${orderXP(o)} XP</span></div>
             <button onclick="deliverOrder(${o.id})" class="btn-pastel btn-mint px-6 py-2.5 text-sm ${ok ? "" : "btn-disabled"}">Deliver order</button></div></div>`;
     }).join("");
-    c.innerHTML = `<div class="inv-stats" style="grid-template-columns:repeat(3,1fr)">
+    c.innerHTML = `<div class="inv-stats">
         <div class="inv-stat" style="--s2:#ffe6ef;--s3:#f4c6d6"><span class="ic">📋</span><div><b>${activeCustomerOrders.length}</b><span class="l">Open requests</span></div></div>
         <div class="inv-stat" style="--s2:#e5f7ea;--s3:#a6dcb8"><span class="ic">✅</span><div><b>${ready}</b><span class="l">Ready to deliver</span></div></div>
+        <div class="inv-stat" style="--s2:#fff0c2;--s3:#f0c860"><span class="ic">👑</span><div><b>${vips}</b><span class="l">VIP customers</span></div></div>
         <div class="inv-stat" style="--s2:#fff3cc;--s3:#f3d98a"><span class="ic">🪙</span><div><b>${potential}</b><span class="l">Coins waiting</span></div></div></div>
+        ${vipDeskHTML()}
         <div class="ord-grid">${cards}</div>`;
 }
 
@@ -1384,7 +1810,7 @@ function playEventActor(kind, pos, done) {
     let x0, y0, flight, hold;
     if (kind === "butterfly") {
         x0 = Math.random() < 0.5 ? -80 : innerWidth + 80; y0 = 40 + Math.random() * innerHeight * 0.45; flight = 2700; hold = 2200;
-        el.innerHTML = `<img class="ba" src="assets/butterfly-${rand(1, 8)}.png" alt="" onerror="this.outerHTML='<span style=\\'font-size:44px\\'>🦋</span>'">`;
+        el.innerHTML = `<img class="ba" src="butterfly-${rand(1, 8)}.png" alt="" onerror="this.outerHTML='<span style=\\'font-size:44px\\'>🦋</span>'">`;
     } else if (kind === "rainbow") {
         x0 = innerWidth * 0.5 + rand(-140, 140); y0 = -40; flight = 1900; hold = 250;
         el.innerHTML = '<div class="orb-rainbow"></div>';
@@ -1833,6 +2259,7 @@ function closeEndOfDayModal() {
     document.getElementById("eod-modal").classList.remove("open");
     eodOpen = false;
     dailyStats = { coinsEarned: 0, salesCount: 0, harvestCount: 0 };
+    dayLog = { harvests: [], sales: [] };
     timeMinutes = 360;
     updateClockDisplay();
     restockShops(true);
@@ -1948,11 +2375,12 @@ function undoFertilize(pos, plant, prev) {
     if (prev.growing) { plant.watered = true; startPlantGrowthTimer(pos); }
     renderTile(pos); return { ok: true, msg: `${plant.name} is back to the ${STAGE_NAMES[prev.stageIndex]} stage.` };
 }
-function undoHarvest(pos, snap, wasNew) {
+function undoHarvest(pos, snap, wasNew, logId) {
     const store = snap.mutation ? mutInventory : flowerInventory, key = snap.mutation ? `${snap.name}|${snap.mutation}` : snap.name;
     if (gardenGridState[pos]) return "Something is planted on that tile now.";
     if ((store[key] || 0) <= 0) return "You already used that flower.";
     store[key]--; if (!store[key]) delete store[key];
+    dayLog.harvests = dayLog.harvests.filter(h => h.id !== logId);
     dailyStats.harvestCount = Math.max(0, dailyStats.harvestCount - 1);
     harvestCount[snap.name] = Math.max(0, (harvestCount[snap.name] || 1) - 1);
     if (snap.mutation) mutHarvested[snap.mutation] = Math.max(0, (mutHarvested[snap.mutation] || 1) - 1);
@@ -1989,14 +2417,18 @@ function undoClaim(id, reward) {
     if (playerCoins < reward) return "You already spent that reward.";
     playerCoins -= reward; delete claimedRewards[id]; return true;
 }
-function undoDeliver(order, freshId, plan, coins, xp) {
+function undoDeliver(order, freshId, plan, coins, xp, saleId) {
     const idx = activeCustomerOrders.findIndex(o => o.id === freshId);
     if (idx === -1) return "That customer's replacement order was already completed.";
     if (playerCoins < coins) return "You already spent those coins.";
     plan.picks.forEach(p => { if (p.k) mutInventory[p.k] = (mutInventory[p.k] || 0) + p.n; else flowerInventory[p.f] = (flowerInventory[p.f] || 0) + p.n; });
     playerCoins -= coins; playerXP = Math.max(0, playerXP - xp);
     dailyStats.coinsEarned = Math.max(0, dailyStats.coinsEarned - coins); dailyStats.salesCount = Math.max(0, dailyStats.salesCount - 1);
-    activeCustomerOrders.splice(idx, 1, order); return true;
+    unregisterVip(activeCustomerOrders[idx]);
+    activeCustomerOrders.splice(idx, 1, order);
+    registerVip(order);
+    dayLog.sales = dayLog.sales.filter(x => x.id !== saleId);
+    return true;
 }
 
 // ---------------------------------------------------------------
@@ -2009,6 +2441,11 @@ function showCutscene(day) {
         ? "A quiet, sleepy day. The blooms are dreaming of tomorrow."
         : earned < 150 ? "Petals, pennies and a little bell on the door."
         : "The shop glowed with happy customers all day long.";
+    const sc = computeShowcase();                       // Quick Sort ranks the day
+    document.getElementById("eod-show").innerHTML = showcaseHTML(sc);
+    if (sc.bonus) { playerCoins += sc.bonus; pushAction(`Bouquet Expo bonus +${sc.bonus}c`); }
+    fameBonus = sc.fame;
+    updatePlayerStats();
     document.getElementById("eod-sales").innerText = dailyStats.salesCount;
     document.getElementById("eod-harvests").innerText = dailyStats.harvestCount;
     document.getElementById("eod-level").innerText = playerLevel;
@@ -2064,6 +2501,7 @@ async function runPythonCode() {
         if (!pyodideInstance) throw new Error("The Python engine could not load. Check your internet connection.");
         await pyodideInstance.runPythonAsync(document.getElementById("code-editor").value.trim());
         unlockGame();
+        onPythonRan();
     } catch (err) {
         consoleEl.innerHTML += `<span class="text-rose-500">Error: ${err.message}</span>`;
         if (!codeRun) setPyStatus("error", err.message.split("\n").filter(Boolean).pop());
@@ -2076,8 +2514,8 @@ async function runAllPythonCode() {
     try {
         await initPyodide();
         if (!pyodideInstance) throw new Error("The Python engine could not load. Check your internet connection.");
-        for (let key = 1; key <= 5; key++) {
-            if (topicTemplates[key] && topicTemplates[key].code) {
+        for (let key = 1; key <= 11; key++) {
+            if (topicTemplates[key] && topicTemplates[key].code && !topicTemplates[key].code.includes("WRITE YOUR CODE HERE")) {
                 consoleEl.innerHTML += `<br><span class="text-amber-700 font-bold">--- Running: Topic ${key} (${topicTemplates[key].title}) ---</span><br>`;
                 await pyodideInstance.runPythonAsync(topicTemplates[key].code);
             }
@@ -2085,6 +2523,7 @@ async function runAllPythonCode() {
         consoleEl.innerHTML += `<br><span class="text-emerald-600 font-bold">✨ Successfully ran all topics!</span><br>`;
         showToast("All topics have been run! ✨");
         unlockGame();
+        onPythonRan();
     } catch (err) {
         consoleEl.innerHTML += `<span class="text-rose-500">Error: ${err.message}</span>`;
         if (!codeRun) setPyStatus("error", err.message.split("\n").filter(Boolean).pop());
@@ -2097,40 +2536,10 @@ function loadTopic() {
 
 const TABS = ["greenhouse", "inventory", "orders", "code"];
 function switchTab(tab) {
-    const views = {
-        greenhouse: document.getElementById("view-greenhouse"),
-        inventory: document.getElementById("view-inventory"),
-        shop: document.getElementById("view-shop"),
-        orders: document.getElementById("view-orders"),
-        code: document.getElementById("view-code"),
-        hashDebug: document.getElementById("view-hash-debug")
-    };
-    const buttons = {
-        greenhouse: document.getElementById("tab-greenhouse"),
-        inventory: document.getElementById("tab-inventory"),
-        shop: document.getElementById("tab-shop"),
-        orders: document.getElementById("tab-orders"),
-        code: document.getElementById("tab-code"),
-        hashDebug: document.getElementById("tab-hashDebug")
-    };
-
-    Object.keys(views).forEach(key => {
-        if (views[key]) views[key].classList.toggle("hidden", key !== tab);
-        if (buttons[key]) {
-            buttons[key].className = key === tab
-                ? "px-5 py-3 rounded-2xl text-xs font-extrabold btn-pastel transition-all flex items-center gap-2 cursor-pointer shadow-sm"
-                : "px-5 py-3 rounded-2xl text-xs font-extrabold text-rose-700 bg-white/60 hover:bg-white transition-all flex items-center gap-2 cursor-pointer border border-rose-200 shadow-sm";
-        }
+    TABS.forEach(key => {
+        document.getElementById("view-" + key).classList.toggle("hidden", key !== tab);
+        document.getElementById("tab-" + key).className = "tab-btn" + (key === tab ? " active" : "");
     });
-
-    // Awtomatikong i-render ang shop upgrades kapag binuksan ang Shop tab
-    if (tab === 'shop') {
-        renderShopUpgrades();
-    }
-    // Awtomatikong i-render ang Hash Table kapag binuksan ang Hash Inspector
-    if (tab === 'hashDebug') {
-        renderHashTableDebug();
-    }
 }
 
 // ---------------------------------------------------------------
@@ -2184,7 +2593,7 @@ function bgResize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2), W = (bg.W = window.innerWidth), H = (bg.H = window.innerHeight);
     bg.cv.width = W * dpr; bg.cv.height = H * dpr;
     bg.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (!bg.bfImgs) bg.bfImgs = Array.from({ length: 8 }, (_, i) => { const im = new Image(); im.src = `assets/butterfly-${i + 1}.png`; return im; });
+    if (!bg.bfImgs) bg.bfImgs = Array.from({ length: 8 }, (_, i) => { const im = new Image(); im.src = `butterfly-${i + 1}.png`; return im; });
     bg.pond = { cx: W * 0.84, cy: H * 0.9, rx: W * 0.14, ry: H * 0.06 };
 
     bg.flowers = [];
@@ -2708,7 +3117,7 @@ const NPCS = {
             { id: "purpose", icon: "🎯", label: "Purpose of the game", pages: [
                 "This game exists so you can SEE data structures and algorithms at work, not just read about them.",
                 "Your actions are the data. Planting, watering, buying and delivering all go through structures that keep everything in order.",
-                "Open the Student Code Editor and run a topic: your own Python code starts driving the game! Topics 1 to 5 are ready, and more chapters will bloom later. The garden stays asleep until you run your code once.",
+                "Open the Student Code Editor and run a topic: your own Python code starts driving the game! Topics 1 to 6 and 8 are ready, and more chapters will bloom later. The garden stays asleep until you run your code once.",
                 "Make a mistake and the garden shows it. If a grid formula uses the wrong width, flowers pop up on the wrong tiles! Spot it, fix it, and you truly understand it."] },
             { id: "events", icon: "🦋", label: "Events & mutations", pages: [
                 "On special days my friends visit: the Butterfly, Rainbow and Cotton Candy events! They are rolled at random for every player, and you can spot them on the Bloom Calendar.",
@@ -2747,7 +3156,9 @@ const NPCS = {
                 "Topic 3, Arrays and 2D lists: the greenhouse is a grid. A tile's index is row × columns + column, and buying beds makes the array grow.",
                 "Topic 4, Trees: the Flower Almanac is a tree of Almanac → tiers → flowers. Walk it with preorder, inorder, postorder and level-order traversals.",
                 "Topic 5, BST and node mutation: tap a calendar day to watch a binary search find it, and watch events mutate a flower's node in place.",
-                "Topics 6 to 11 (hash tables, graphs, sorting, searching, Dijkstra and dynamic programming) are waiting for future updates!"] }
+                "Topic 6, Hash tables: the VIP Desk finds a customer by ID with ONE hash lookup and chains VIPs that share a bucket. The Greenhouse Memory rehashes itself when it gets too full.",
+                "Topic 8, Sorting: the Boutique Auto-Organizer uses insertion sort on your harvest basket, and the Bouquet Expo uses quick sort to rank the day's best sales.",
+                "Topics 7, 9, 10 and 11 (graphs, searching, Dijkstra and dynamic programming) are waiting for future updates!"] }
         ]
     }
 };
@@ -2962,7 +3373,7 @@ function alCover() {
         .map(([label, sp, ic]) => `<div class="toc-row" onclick="flipAlmanacTo(${sp})"><span>${ic} ${label}</span><i class="dots"></i><b>${sp * 2 + 1}</b></div>`).join("");
     return {
         left: `<div class="cover-pg"><div class="ap-kicker">A FIELD GUIDE TO EVERY BLOOM</div><h2 class="ap-title big">Flower Almanac</h2>
-            <div class="pop-scene"><img class="pop-bf" src="assets/butterfly-2.png" alt="" onerror="this.remove()"><div class="pop-ground"></div>${flowers}</div>
+            <div class="pop-scene"><img class="pop-bf" src="butterfly-2.png" alt="" onerror="this.remove()"><div class="pop-ground"></div>${flowers}</div>
             <p class="ap-sub" style="margin-top:8px">Harvest every flower to fill the pages ♡</p></div>`,
         right: `<h2 class="ap-title">Contents</h2><div class="toc">${toc}</div>
             <div class="prog"><div class="flex justify-between text-xs font-bold mb-1"><span>📖 Discovered</span><span>${n} / ${total}</span></div>
@@ -3057,7 +3468,7 @@ function mountCodeReminder() {
     const card = document.createElement("div");
     card.id = "code-reminder"; card.className = "code-reminder glass-panel"; card.setAttribute("role", "note");
     card.innerHTML = `<button class="cr-min" onclick="toggleReminder(true)" aria-label="Minimize the reminder" title="Minimize">–</button>
-        <div class="cr-sleep"><img class="cr-bf" src="assets/butterfly-6.png" alt="" onerror="this.remove()">
+        <div class="cr-sleep"><img class="cr-bf" src="butterfly-6.png" alt="" onerror="this.remove()">
             <img class="cr-flower" src="rose.png" alt="" onerror="this.replaceWith('🌷')"><span class="zz z1">z</span><span class="zz z2">Z</span><span class="zz z3">z</span></div>
         <div class="cr-ribbon">✿ the garden is sleeping ✿</div>
         <h3 class="cr-title" id="cr-title">Wake up the garden!</h3>
@@ -3136,66 +3547,6 @@ function unlockGame(skipped) {
     pushAction(skipped ? "Started without running code" : "Ran the code lab: the garden woke up");
 }
 
-function renderHashTableDebug() {
-    const container = document.getElementById("hash-buckets-container");
-    if (!container) return;
-    container.innerHTML = "";
-
-    // Update summary counters
-    const capacityEl = document.getElementById("hash-capacity");
-    const countEl = document.getElementById("hash-count");
-    const loadFactorEl = document.getElementById("hash-load-factor");
-
-    if (capacityEl) capacityEl.innerText = vipOrderTable.size;
-    if (countEl) countEl.innerText = vipOrderTable.count;
-    if (loadFactorEl) loadFactorEl.innerText = (vipOrderTable.count / vipOrderTable.size).toFixed(2);
-
-    vipOrderTable.buckets.forEach((bucket, index) => {
-        let bucketDiv = document.createElement("div");
-        bucketDiv.className = "bg-white/90 p-3.5 rounded-2xl border border-rose-200/80 shadow-sm flex flex-col gap-2";
-        
-        let chainHtml = bucket.length === 0 
-            ? `<span class="text-[11px] text-gray-400 italic px-1">Empty Slot</span>` 
-            : bucket.map(item => {
-                const order = item.orderDetails;
-                // Handle both single orders and bouquets correctly
-                let displayName = "";
-                let displayQty = "";
-
-                if (order.type === "single") {
-                    displayName = order.flowerName || "Flower";
-                    displayQty = `${order.quantity || 1}x`;
-                } else if (order.type === "bouquet") {
-                    displayName = "Custom Bouquet";
-                    displayQty = order.items ? `${Object.keys(order.items).length} types` : "Bouquet";
-                } else {
-                    displayName = order.flower || "Order";
-                    displayQty = order.qty ? `${order.qty}x` : "1x";
-                }
-
-                return `
-                <div class="bg-rose-50/90 border border-rose-200 px-3 py-1.5 rounded-xl flex justify-between items-center text-xs font-bold text-rose-900 shadow-xs">
-                    <div class="flex items-center gap-1.5">
-                        <span class="text-amber-500">🔑</span>
-                        <span><b>${item.customerID}</b></span>
-                        <span class="text-[10px] bg-rose-200/60 text-rose-800 px-1.5 py-0.5 rounded-md font-semibold">${displayName} (${displayQty})</span>
-                    </div>
-                    <span class="text-amber-700 font-extrabold text-[11px]">+${order.rewardCoins || 0} Coins</span>
-                </div>
-                `;
-              }).join("");
-
-        bucketDiv.innerHTML = `
-            <div class="flex justify-between items-center text-xs font-extrabold text-rose-900 border-b border-rose-100 pb-1.5">
-                <span>Bucket Index [${index}]</span>
-                <span class="text-[10px] bg-amber-100 border border-amber-300/60 text-amber-900 px-2 py-0.5 rounded-full font-bold">Chaining: ${bucket.length} items</span>
-            </div>
-            <div class="flex flex-col gap-1.5 pt-0.5">${chainHtml}</div>
-        `;
-        container.appendChild(bucketDiv);
-    });
-}
-
 // ---------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------
@@ -3218,6 +3569,7 @@ window.onload = () => {
     });
     document.getElementById("music-btn").textContent = "🔇";
 
+    activeCustomerOrders.forEach(registerVip);
     restockShops(false);
     refreshSeedSelector();
     renderGarden();
@@ -3239,102 +3591,4 @@ window.onload = () => {
     mountCodeReminder();
     switchTab("greenhouse");
     initPyodide().catch(() => {});
-};
-
-// Visual Hash Table Renderer for Topic 6 (Floral Theme Alignment)
-window.renderVisualHashTable = function(buckets, capacity, size) {
-    const consoleEl = document.getElementById("output-console");
-    if (!consoleEl) return;
-
-    let loadFactor = (size / capacity).toFixed(2);
-    let html = `
-        <div class="mt-3 p-4 bg-white/90 border-2 border-rose-200 rounded-2xl shadow-sm space-y-3">
-            <div class="flex items-center justify-between border-b border-rose-100 pb-2">
-                <span class="font-extrabold text-rose-900 text-xs flex items-center gap-1.5">🌸 Topic 6 Live Hash Inspector</span>
-                <span class="text-[10px] bg-rose-100 text-rose-700 font-bold px-2 py-0.5 rounded-full">Capacity: ${capacity} | Load: ${loadFactor}</span>
-            </div>
-            <div class="grid grid-cols-1 gap-2 max-h-48 overflow-auto">
-    `;
-
-    buckets.forEach((bucket, idx) => {
-        let chainItems = bucket.length === 0 
-            ? `<span class="text-[11px] text-gray-400 italic">Empty Slot</span>`
-            : bucket.map(item => `
-                <div class="bg-rose-50/80 border border-rose-200 px-2.5 py-1 rounded-xl flex justify-between items-center text-[11px] text-rose-900 font-bold">
-                    <span>🔑 ${item[0]}</span>
-                    <span class="text-emerald-700 font-semibold">${item[1].flower} (${item[1].qty}x)</span>
-                </div>
-              `).join("");
-
-        html += `
-            <div class="bg-amber-50/40 border border-amber-200/60 p-2.5 rounded-xl flex flex-col gap-1.5">
-                <div class="flex justify-between items-center text-[11px] font-extrabold text-amber-900">
-                    <span>Bucket Index [${idx}]</span>
-                    <span class="text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full">Chaining: ${bucket.length}</span>
-                </div>
-                <div class="flex flex-wrap gap-1.5">${chainItems}</div>
-            </div>
-        `;
-    });
-
-    html += `</div></div>`;
-    consoleEl.innerHTML += html;
-};
-
-// Cute Pastel UI Renderer for Topic 8 (Sorted Inventory)
-window.renderVisualSortedInventory = function(sortedItems) {
-    const consoleEl = document.getElementById("output-console");
-    if (!consoleEl) return;
-
-    if (!sortedItems || sortedItems.length === 0) {
-        consoleEl.innerHTML += `
-            <div class="mt-3 p-4 bg-rose-50/80 border-2 border-rose-200 rounded-2xl text-center text-xs text-rose-700 font-bold">
-                🌸 Your flower inventory is currently empty! Harvest some flowers first to see the sorted list.
-            </div>
-        `;
-        return;
-    }
-
-    let cardsHtml = sortedItems.map((item, index) => {
-        const flowerName = item[0];
-        const count = item[1];
-        
-        // Cute rank badges
-        let rankBadge = `<span class="bg-rose-100 text-rose-700 text-[10px] px-2 py-0.5 rounded-full font-bold">Rank #${index + 1}</span>`;
-        if (index === 0) rankBadge = `<span class="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded-full font-extrabold border border-amber-300">👑 Top Stock</span>`;
-
-        return `
-            <div class="bg-white/90 border border-rose-200 p-3 rounded-xl flex items-center justify-between shadow-xs hover:border-rose-300 transition-all">
-                <div class="flex items-center gap-2.5">
-                    <span class="text-base">🌺</span>
-                    <div>
-                        <div class="text-xs font-extrabold text-rose-900">${flowerName}</div>
-                        ${rankBadge}
-                    </div>
-                </div>
-                <div class="bg-rose-50 border border-rose-100 px-3 py-1 rounded-lg text-right">
-                    <span class="text-xs font-black text-rose-800">${count}</span>
-                    <span class="text-[10px] text-rose-600 block -mt-1 font-semibold">in stock</span>
-                </div>
-            </div>
-        `;
-    }).join("");
-
-    let containerHtml = `
-        <div class="mt-3 p-4 bg-white/90 border-2 border-rose-200 rounded-2xl shadow-sm space-y-3">
-            <div class="flex items-center justify-between border-b border-rose-100 pb-2">
-                <span class="font-extrabold text-rose-900 text-xs flex items-center gap-1.5">
-                    🌸 Sorted Inventory Dashboard (Insertion Sort)
-                </span>
-                <span class="text-[10px] bg-rose-100 text-rose-700 font-bold px-2.5 py-0.5 rounded-full">
-                    Total Types: ${sortedItems.length}
-                </span>
-            </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-auto pr-1">
-                ${cardsHtml}
-            </div>
-        </div>
-    `;
-
-    consoleEl.innerHTML += containerHtml;
 };

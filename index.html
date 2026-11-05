@@ -47,9 +47,6 @@
         <button onclick="switchTab('inventory')" id="tab-inventory" class="tab-btn"><i data-lucide="package" class="w-4 h-4"></i> Inventory &amp; Tools</button>
         <button onclick="switchTab('orders')" id="tab-orders" class="tab-btn"><i data-lucide="clipboard-list" class="w-4 h-4"></i> Customer Orders</button>
         <button onclick="switchTab('code')" id="tab-code" class="tab-btn"><i data-lucide="code" class="w-4 h-4"></i> Student Code Editor</button>
-        <button onclick="switchTab('hashDebug')" id="tab-hashDebug" class="px-5 py-3 rounded-2xl text-xs font-extrabold text-rose-700 bg-white/60 hover:bg-white transition-all flex items-center gap-2 cursor-pointer border border-rose-200 shadow-sm">
-            <i data-lucide="cpu" class="w-4 h-4 text-rose-500"></i> Hash Inspector
-        </button>
     </nav>
 
     <main class="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-5 flex-grow">
@@ -91,29 +88,6 @@
                 <p class="text-xs font-semibold" style="color:var(--ink-soft)">Deliver flowers from your harvest. The coin reward equals the total price of the flowers requested.</p>
                 <div id="orders-list-container" class="orders-wrap"></div>
             </div>
-
-            <!-- Hash Table Visual Debug Panel -->
-            <div id="view-hash-debug" class="glass-panel p-6 space-y-4 hidden">
-                <h2 class="text-base font-extrabold text-rose-900 flex items-center gap-2 border-b border-rose-200/60 pb-3">
-                    <i data-lucide="cpu" class="w-5 h-5 text-rose-500"></i> Hash Table & Chaining Live Inspector (Topic 6)
-                </h2>
-                <p class="text-xs text-rose-700/80">Real-time visualization of VIP customer order hashing, bucket distribution, collision chaining, and load factor rehashing.</p>
-    
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-                    <div class="bg-white/80 p-3 rounded-xl border border-rose-200 text-xs font-bold text-rose-800">
-                        <span>Table Capacity (Buckets): </span><span id="hash-capacity" class="text-rose-600">5</span>
-                </div>
-                <div class="bg-white/80 p-3 rounded-xl border border-rose-200 text-xs font-bold text-rose-800">
-                    <span>Total Stored Orders: </span><span id="hash-count" class="text-rose-600">0</span>
-                </div>
-                <div class="bg-white/80 p-3 rounded-xl border border-rose-200 text-xs font-bold text-rose-800">
-                    <span>Load Factor: </span><span id="hash-load-factor" class="text-rose-600">0.00</span>
-                </div>
-            </div>
-
-    <!-- Buckets Container -->
-    <div id="hash-buckets-container" class="space-y-2.5 max-h-72 overflow-auto"></div>
-</div>
 
             <!-- CODE EDITOR -->
             <div id="view-code" class="glass-panel p-6 flex flex-col flex-grow hidden">
@@ -210,11 +184,16 @@
                 <div class="cut-kicker">✿ THE DAY DRIFTS TO A CLOSE ✿</div>
                 <h2 id="eod-title" class="cut-title">Day 1 closed</h2>
                 <p id="eod-line" class="cut-line"></p>
-                <div class="cut-coins"><span class="text-2xl">🪙</span><b id="eod-coins">+0</b><span class="text-xs font-bold" style="color:#8a5a10">coins today</span></div>
-                <div class="cut-stats">
-                    <div><b id="eod-sales">0</b>Orders fulfilled</div>
-                    <div><b id="eod-harvests">0</b>Flowers harvested</div>
-                    <div><b id="eod-level">1</b>Garden level</div>
+                <div class="cut-cols">
+                    <div class="cut-left">
+                        <div class="cut-coins"><span class="text-2xl">🪙</span><b id="eod-coins">+0</b><span class="text-xs font-bold" style="color:#8a5a10">coins today</span></div>
+                        <div class="cut-stats">
+                            <div><b id="eod-sales">0</b>Orders fulfilled</div>
+                            <div><b id="eod-harvests">0</b>Flowers harvested</div>
+                            <div><b id="eod-level">1</b>Garden level</div>
+                        </div>
+                    </div>
+                    <div class="cut-right" id="eod-show"></div>
                 </div>
                 <div id="eod-next" class="cut-next"></div>
                 <button onclick="closeEndOfDayModal()" class="btn-pastel btn-mint py-3 text-sm mx-auto px-10">Wake up to the next day 🌅</button>
